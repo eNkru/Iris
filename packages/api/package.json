@@ -1,0 +1,35 @@
+{
+  "name": "@iris/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./orpc/router": "./src/orpc/router.ts",
+    "./orpc/procedures": "./src/orpc/procedures.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@iris/auth": "workspace:*",
+    "@iris/database": "workspace:*",
+    "@iris/prices": "workspace:*",
+    "@iris/utils": "workspace:*",
+    "@orpc/client": "^1.0.0",
+    "@orpc/server": "^1.0.0",
+    "@orpc/zod": "^1.0.0",
+    "drizzle-orm": "^0.44.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

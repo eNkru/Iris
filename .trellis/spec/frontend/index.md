@@ -28,6 +28,7 @@
 | [type-safety.md](./type-safety.md)                   | TypeScript guidelines, type inference, Zod           | Reference     |
 | [css-layout.md](./css-layout.md)                     | CSS patterns, flexbox, responsive, touch             | Reference     |
 | [ai-sdk-integration.md](./ai-sdk-integration.md)     | useChat hook, streaming, tool call handling           | Reference     |
+| [deployment.md](./deployment.md)                     | Instrumentation/edge-runtime guard, Docker deploy     | Reference     |
 | [quality.md](./quality.md)                           | Pre-commit checklist and code quality standards      | Reference     |
 
 ---

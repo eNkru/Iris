@@ -1,0 +1,19 @@
+{
+  "name": "iris",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @iris/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @iris/database db:generate",
+    "db:migrate": "pnpm --filter @iris/database db:migrate",
+    "db:seed": "pnpm --filter @iris/database db:seed",
+    "db:studio": "pnpm --filter @iris/database db:studio"
+  }
+}
