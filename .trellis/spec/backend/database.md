@@ -4,6 +4,27 @@ This document covers database best practices using Drizzle ORM with PostgreSQL.
 
 ## Critical Rules
 
+### 0. FK to better-auth `user.id` must be `text`, NOT `uuid`
+
+better-auth generates user IDs as **32-char alphanumeric strings** (`generateId(32)` → `[A-Za-z0-9]`), and its Drizzle adapter schema declares `user.id` as `text`. Any app table with a foreign key referencing `user.id` MUST declare that column as `text(...)` — declaring it `uuid(...)` makes the FK incompatible and `db:migrate` fails at schema creation:
+
+```
+ERROR: foreign key constraint "..." cannot be implemented
+DETAIL: Key columns "userId" and "id" are of incompatible types: uuid and text.
+```
+
+```typescript
+// BAD — uuid FK to a text primary key
+userId: uuid("userId").references(() => user.id, { onDelete: "cascade" }),
+
+// GOOD — text FK matching better-auth's text user.id
+userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+```
+
+This applies to every table that scopes data to a user (`products.userId`, `alert_channels.userId`, `user_settings.userId`, ...). `session.userId` / `account.userId` already use `text` in the auth schema — mirror that.
+
+
+
 ### 1. NO `await` in Loops (N+1 Problem)
 
 Never use `await` inside a loop. This creates the N+1 query problem, causing severe performance degradation.

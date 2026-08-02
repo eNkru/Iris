@@ -113,6 +113,11 @@ better-auth uses Drizzle ORM for database operations. The required tables are au
 - `account` - OAuth provider accounts (Google, GitHub, etc.)
 - `verification` - Email verification tokens
 
+> **Warning**: better-auth generates `user.id` as a **32-char alphanumeric `text`**, not a UUID.
+> Any app table with a foreign key referencing `user.id` must declare that column as
+> `text(...)` (see `backend/database.md` rule 0). A `uuid(...)` FK to `user.id` fails
+> `db:migrate` with an "incompatible types: uuid and text" error.
+
 ### Session Configuration
 
 ```typescript

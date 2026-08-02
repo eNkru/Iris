@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/type-safety.md", "reason": "Verify all API inputs/outputs have Zod schemas, standard response format"}
+{"file": ".trellis/spec/backend/database.md", "reason": "Verify no N+1, batch queries with inArray, JSONB casting"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Backend pre-commit checklist"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Frontend pre-commit checklist"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Shared code quality and lint standards"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify data flow across DB -> oRPC -> React Query -> chart"}

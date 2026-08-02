@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+out
+dist
+build
+*.tsbuildinfo
+
+# Environment & secrets — never bake into the image
+.env
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Local tooling / editor / OS
+.idea
+.vscode
+.opencode
+.claude
+.agents
+.DS_Store
+*.log
+
+# Trellis task artifacts (not needed in the image)
+.trellis
+
+# Docker itself (the build context doesn't need these)
+Dockerfile
+docker-compose.yml
+.dockerignore

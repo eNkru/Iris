@@ -8,11 +8,147 @@ This document covers backend integration patterns using the Vercel AI SDK (`ai` 
 - **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4-turbo
 - **Google Gemini**: gemini-1.5-pro, gemini-1.5-flash
 - **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus
+- **OpenCode Zen** (`opencode`): OpenAI-compatible gateway
+  (`https://opencode.ai/zen/v1`), models like `deepseek-v4-flash-free`.
+  Built with `@ai-sdk/openai-compatible`.
 
 ### Package Dependencies
 ```bash
-pnpm add ai @ai-sdk/openai @ai-sdk/google @ai-sdk/anthropic
+pnpm add ai @ai-sdk/openai @ai-sdk/google @ai-sdk/anthropic @ai-sdk/openai-compatible
 ```
+
+> **CRITICAL version pin**: `@ai-sdk/openai-compatible` must stay on the `0.2.x`
+> line (e.g. `^0.2.16`). The `1.x` line pulls in `@ai-sdk/provider` v2 /
+> `provider-utils` v3, which is incompatible with the `ai@4.x` installed here
+> (LanguageModelV1). Check the pinned `ai` version before bumping any
+> `@ai-sdk/*` package.
+
+### Env Contract (additive, all optional)
+
+```bash
+# OpenCode Zen — OpenAI-compatible provider "opencode"
+OPENCODE_API_KEY=""                          # empty → provider degrades to null
+OPENCODE_BASE_URL="https://opencode.ai/zen/v1"  # overridable without rebuild
+```
+
+Registry: `AI_PROVIDER_VALUES` in `packages/utils/src/lib/enum-types.ts` is the
+single source of truth. Always derive provider enums from it
+(`z.enum(AI_PROVIDER_VALUES)`, `pgEnum("ai_provider", AI_PROVIDER_VALUES)`) —
+never hardcode a `"openai" | "gemini" | ...` union, or the list drifts.
+
+## 1a. CRITICAL: `ai@4.x` + zod v4 incompatibility
+
+> **Warning**: `ai@4.x` (`ai@4.3.19`) is NOT compatible with zod v4.
+>
+> The `zodSchema()` helper converts schemas through
+> `zod-to-json-schema@3.25.2`, which only reads zod v3's `_def.typeName`.
+> zod v4.4.3 moved that to `_def.type`, so **every** schema converts to an empty
+> `{}` object (no `type: "object"`). Providers that strictly validate tool
+> schemas (DeepSeek via Zen, etc.) then reject `generateObject` with:
+>
+> ```
+> Invalid schema for function 'json': schema must be a JSON Schema of
+> 'type: "object"', got 'type: null'.
+> ```
+>
+> **Fix**: build the AI SDK `Schema` from zod v4's native `toJSONSchema()`
+> instead of passing the zod schema directly. Keep output validation via the
+> `validate` option. Pattern (see `packages/prices/src/pipeline/ai-extract.ts`):
+
+```typescript
+import { generateObject, jsonSchema } from "ai";
+
+function aiSchema() {
+  return jsonSchema<PriceExtraction>(
+    priceExtractionSchema.toJSONSchema({ target: "draft-07" }) as unknown as Parameters<
+      typeof jsonSchema
+    >[0],
+    {
+      validate: (value) => {
+        const result = priceExtractionSchema.safeParse(value);
+        return result.success
+          ? { success: true, value: result.data }
+          : { success: false, error: result.error };
+      },
+    },
+  );
+}
+
+const { object } = await generateObject<PriceExtraction>({
+  model,
+  schema: aiSchema(),
+  prompt,
+});
+```
+
+## 1b. Gotcha: DeepSeek thinking models reject `tool_choice`
+
+Zen routes open-source models (e.g. `deepseek-v4-flash-free`) to DeepSeek,
+whose **thinking mode** rejects the *required* `tool_choice` that
+`generateObject`'s tool mode sends:
+
+```
+Error from provider (DeepSeek): Thinking mode does not support this tool_choice
+```
+
+Two workarounds exist; which one to use depends on whether the extraction needs
+web access (see 1d):
+
+1. **Plain structured output, no tools**: `generateObject` with `mode: "json"`
+   (sends `response_format` instead of tool calling):
+   ```typescript
+   mode: config.provider === "opencode" ? "json" : "auto",
+   ```
+2. **Structured output + tools**: `generateObject` + `tools` is blocked. Use
+   `generateText` with `tools` instead — its default tool_choice is "auto",
+   which thinking models accept. Have the model return strict JSON and validate
+   it yourself (see 1d).
+
+## 1d. Gotcha: a bare model call has NO web access
+
+A model called through `/chat/completions` (what `createOpenAICompatible` sends)
+cannot visit websites — it will honestly report *"I can't visit live
+websites"*. This is **not** a model limitation: the OpenCode TUI works because
+it wires up a `webfetch` tool. To give a model web access, pass it a fetch tool:
+
+```typescript
+import { generateText, tool, jsonSchema } from "ai";
+
+const result = await generateText({
+  model,
+  maxSteps: 5, // must exceed 1, or the final answer after the tool call is dropped
+  tools: {
+    fetchPage: tool({
+      description: "Fetch a web page and return a compact representation of its content.",
+      parameters: jsonSchema<{ url: string }>(paramsSchema.toJSONSchema({ target: "draft-07" })),
+      execute: async ({ url }) => reducePageHtml(await fetchText(url)),
+    }),
+  },
+  prompt: "...call the fetchPage tool... Return ONLY a JSON object...",
+});
+```
+
+- Tool `parameters` must also use the zod-v4-native `toJSONSchema` trick (1a) —
+  `tool()` routes parameters through the same broken `zodSchema()` path.
+- Parse the strict JSON out of `result.text` and validate with
+  `priceExtractionSchema.safeParse` yourself; `generateText` does not validate.
+- `generateObject` + `tools` fails on DeepSeek thinking (1b), so the fetch-tool
+  path must use `generateText`. Other providers keep `generateObject` (no tools)
+  — see `aiExtractPrice` in `packages/prices/src/pipeline/ai-extract.ts`.
+
+## 1c. Gotcha: page truncation can hide the price
+
+`buildExtractionPrompt` truncates HTML to `MAX_PROMPT_HTML_CHARS = 40_000`.
+Some sites (e.g. Bunnings NZ) emit megabytes of CSS-in-JS before the actual
+price markup, so the truncated prompt contains no price → the model correctly
+reports `available: false`. This is a pipeline/prompt characteristic, not an AI
+bug — verify a real page's price appears within the truncation window before
+assuming extraction failure.
+
+The `opencode` path avoids this entirely: the model fetches the page itself via
+the `fetchPage` tool (1d), which returns a compact reduction — visible text
+plus any embedded price JSON (React-Query/Next.js pages hydrate
+`{"formattedValue":"$119.00","value":119}` into `<script>` blobs).
 
 ## 2. Basic Usage
 
@@ -322,6 +458,21 @@ import { anthropic } from "@ai-sdk/anthropic";
 const model = anthropic("claude-3-5-sonnet-20241022");
 ```
 
+### OpenCode Zen (OpenAI-compatible)
+
+```typescript
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const model = createOpenAICompatible({
+  name: "opencode",
+  baseURL: getEnv().OPENCODE_BASE_URL,
+  apiKey: getEnv().OPENCODE_API_KEY,
+})(getEnv().AI_MODEL);
+```
+
+Missing key (`OPENCODE_API_KEY === ""`) → `createModel` returns `null` and the
+pipeline logs "AI provider not configured" instead of throwing.
+
 ## 8. Best Practices Summary
 
 | Rule | Description |
@@ -348,4 +499,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
+
+# OpenCode Zen (provider "opencode")
+OPENCODE_API_KEY=sk-zen-...
+OPENCODE_BASE_URL=https://opencode.ai/zen/v1
 ```

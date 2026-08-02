@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module layout for packages/api modules and procedures"}
+{"file": ".trellis/spec/backend/orpc-usage.md", "reason": "oRPC router, protectedProcedure, Zod input/output patterns"}
+{"file": ".trellis/spec/backend/database.md", "reason": "Drizzle schema/query patterns, transactions, JSONB columns"}
+{"file": ".trellis/spec/backend/authentication.md", "reason": "better-auth magic link + OAuth config, protected/admin procedures"}
+{"file": ".trellis/spec/backend/ai-sdk-integration.md", "reason": "generateObject price extraction, telemetry, error handling"}
+{"file": ".trellis/spec/backend/performance.md", "reason": "p-limit concurrency, exponential backoff, Redis distributed locks for scheduler"}
+{"file": ".trellis/spec/backend/logging.md", "reason": "Structured logging for pipeline and scheduler"}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "TypeScript strict conventions across packages"}
+{"file": ".trellis/spec/frontend/orpc-usage.md", "reason": "React Query + oRPC client integration"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Server/Client component patterns for UI pages"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "URL state (nuqs) for trend chart time-range selector"}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "Query and mutation hook patterns"}
