@@ -452,37 +452,71 @@ async function batchProcessWithProgress(
 }
 ```
 
-## Transport Fallback for Bot-Protected Pages
+## Page Fetch Transport for Bot-Protected Pages
 
-Some retailers (e.g. Cloudflare-proxied shops like `pbtech.co.nz`) sit behind a
-Managed Security Challenge that fingerprints the HTTP/2 + TLS client. Node's
-native `fetch` (undici) is flagged → `403`/`503` for a perfectly valid request,
-and the page is never delivered. The price-extraction pipeline then fails on
-"Page fetch failed" and the create flow rolls the product row back.
+Some retailers (e.g. Cloudflare-proxied shops like `pbtech.co.nz`,
+`thewarehouse.co.nz`) sit behind a Managed Security Challenge that not only
+fingerprints the HTTP/2 + TLS client but also serves a JavaScript challenge
+(`_cf_chl_opt`, `cType: 'managed'`) that must be executed to solve. Node's
+native `fetch` (undici) is flagged → `403`/`503`, and the page is never
+delivered; the price-extraction pipeline then fails on "Page fetch failed" and
+the create flow rolls the product row back.
 
-The fix is a **targeted transport fallback**, not retailer-specific code. Keep
-undici primary (no regression for retailers that already work) and retry the
-same URL with a browser-TLS impersonator only on a challenge status.
+A TLS-impersonation fallback (the prior `wreq-js` with a `chrome_*` profile) is
+**not robust enough**: Cloudflare scores an entire browser family (all
+`chrome_*` versions) as a single class, so sites like thewarehouse reject every
+Chrome-family profile while accepting Firefox/Safari. Profile rotation adds
+complexity and still has a blind spot the next time Cloudflare adjusts its
+scoring. The only universally-compatible transport is a **real headless
+browser that executes the challenge JavaScript**.
 
-### Pattern: undici-primary + browser-TLS fallback
+### Pattern: single Playwright headless Chromium transport
+
+`fetchPage` uses one transport — Playwright `chromium` — for every fetch. There
+is no undici primary path and no per-retailer branch. The browser is launched
+**once per process** and shared across all `fetchPage` calls; each call creates
+a fresh `context` + `page` (so cookies / storage do not leak between retailers)
+and disposes them in a `finally`. The shared `pLimit` and the retry /
+exponential-backoff / structured-logging envelope are preserved unchanged.
 
 ```typescript
 // packages/prices/src/pipeline/fetch-page.ts (abridged)
-const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
-const CHALLENGE_STATUS_CODES = new Set([403, 503, 529]);
+let browserPromise: Promise<import("playwright").Browser> | null = null;
 
-async function fetchPage(url: string, opts: FetchPageOptions) {
+async function getBrowser(): Promise<import("playwright").Browser> {
+  if (browserPromise === null) {
+    browserPromise = (async () => {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({ headless: true, timeout: 60_000 });
+      process.once("beforeExit", () => void browser.close().catch(() => {}));
+      return browser;
+    })();
+  }
+  return browserPromise;
+}
+
+async function attemptPlaywrightFetch(url: string, opts: FetchPageOptions) {
+  const browser = await getBrowser();
+  const context = await browser.newContext();   // fresh per call
+  const page = await context.newPage();
+  try {
+    const response = await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: FETCH_TIMEOUT_MS,
+    });
+    if (!response?.ok()) return { kind: "status", status: response?.status() ?? 0 };
+    return { kind: "ok", html: await page.content(), url: page.url() };
+  } finally {
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+  }
+}
+
+export async function fetchPage(url: string, opts: FetchPageOptions) {
   return pageFetchLimiter(async () => {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const result = await attemptUndiciFetch(url);
-
+      const result = await attemptPlaywrightFetch(url, opts);
       if (result.kind === "ok") return { html: result.html, url: result.url };
-
-      if (result.kind === "status" && CHALLENGE_STATUS_CODES.has(result.status)) {
-        // Only the challenge path takes the slow/expensive transport.
-        const tls = await fetchWithBrowserTls(url, opts);
-        if (tls) return tls;
-      }
       // ... normal backoff / retry / null on total failure
     }
     return null;
@@ -490,40 +524,52 @@ async function fetchPage(url: string, opts: FetchPageOptions) {
 }
 ```
 
-The fallback is loaded via **dynamic `import("wreq-js")`** so the native binding
-is only resolved on the challenge path — undici-only retailers never pay the
-load cost, and the import never throws at module init when the binding is
-absent (e.g. unsupported arch in dev).
+### Choice of browser library
 
-### Choice of impersonator
+`playwright` (Microsoft, MIT) is the chosen library: first-party, supports
+Node 22, the `chromium` channel is the most predictable across glibc / musl
+deployments, and the API surface is tiny (`newContext` + `newPage` + `goto`
++ `content` + `close`). `playwright-core` + `@playwright/browser-chromium` is
+the equivalent split; this repo just depends on `playwright` directly.
 
-`wreq-js` (Rust/NAPI, MIT) is the recommended choice: modern, fetch-compatible
-API, per-request browser profile, and prebuilt artifacts in the npm tarball for
-`linux-x64-gnu`, `linux-x64-musl`, `linux-arm64-gnu`, `linux-arm64-musl`,
-`darwin-x64`, `darwin-arm64`, `win32-x64`. No postinstall build script is
-required, so no `pnpm-workspace.yaml` `allowBuilds` entry is needed and no Rust
-toolchain is needed in the Docker image.
-
-The GPL-3.0 `node-tls-client` was rejected to keep the repo license-clean.
+Rejected alternatives: pure TLS-profile rotation (insufficient — one browser
+family is a single scoring class), Puppeteer (less predictable across
+deployments), CAPTCHA-solving service (cost, third-party dependency, ToS risk).
 
 ### Required wiring
 
-- Add the package to the consuming package's `dependencies` and to
-  `apps/web/next.config.ts` `serverExternalPackages` so Next.js does not try to
-  bundle the `.node` file with server code.
-- The `User-Agent` header on the undici path should match the `browser` profile
-  used by the fallback (e.g. `chrome_130` ↔ a recent Chrome UA). Mismatched UA
-  on a Cloudflare-challenged response is a common reason the fallback also
-  fails.
-- Keep the shared `pLimit` and structured logging wrapping the fallback exactly
-  as the primary — observability must be consistent across both transports.
+- `playwright` is a direct dependency of both `@iris/prices` (the package that
+  imports it) and `@iris/web` (so pnpm symlinks it into `apps/web/node_modules/`
+  for the Next.js server bundle to resolve at runtime). Pin the same exact
+  version in both `package.json` files (e.g. `1.49.1`) — a mismatch causes
+  two browser binaries to be downloaded.
+- Add `playwright` and `playwright-core` to `apps/web/next.config.ts`
+  `serverExternalPackages` so webpack leaves the dynamic `import("playwright")`
+  as a runtime `require()` / `import()` that Node resolves from `node_modules`.
+  **Do NOT use an `IgnorePlugin` / `beforeResolve` returning `false`** — that
+  makes webpack emit a stub that throws `"Cannot find module"` at runtime
+  instead of leaving the module external.
+- `apps/web/tsconfig.json` excludes `next.config.ts` from the app's
+  `tsc --noEmit`; Next compiles the file itself with webpack in scope.
+- Keep the shared `pLimit` and structured logging wrapping the transport so
+  observability is consistent across all fetches.
+
+### Docker image (glibc, not musl)
+
+Playwright's chromium build is linked against **glibc** and cannot run on
+Alpine/musl. The `Dockerfile` uses `node:22-bookworm-slim` (Debian) and runs
+`pnpm --filter @iris/prices exec playwright install --with-deps chromium` at
+image-build time. `--with-deps` runs `apt-get` to install the runtime libraries
+(nss, freetype, harfbuzz, fontconfig, etc.) and downloads the matching
+chromium binary into `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so the app can
+launch it offline at runtime.
 
 ### Anti-pattern: retailer-specific code
 
 Do NOT add a per-retailer branch like "if the URL contains pbtech.co.nz, use
-transport X". The challenge status code is a generic signal; any future
-Cloudflare-proxied retailer benefits from the same fallback. Branch only on
-the HTTP status, never on the hostname.
+transport X". The single Playwright transport handles every retailer the same
+way; any future Cloudflare-proxied site benefits automatically. There is no
+URL allowlist and no per-hostname code path.
 
 ## Memory Optimization
 

@@ -1,0 +1,4 @@
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/prd.md", "note": "Goal, confirmed root cause (Cloudflare Managed Security Challenge 403 vs undici), acceptance criteria."}
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/design.md", "note": "Transport fallback via browser-TLS lib (wreq-js recommended); keep undici primary."}
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/implement.md", "note": "Checklist, validation commands, musl/alpine deploy risk gate."}
+{"role": "decision", "path": "apps/web/next.config.ts", "note": "Inline IgnorePlugin for playwright(-core)? on the server bundle — required because webpack 5 statically walks dynamic import('playwright') and chokes on playwright-core/lib/server/recorder's require.resolve('../../vite/recorder/'+uri). serverExternalPackages alone is insufficient. Node resolves the modules at runtime from node_modules."}
