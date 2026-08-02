@@ -14,6 +14,14 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@iris/api", "@iris/auth", "@iris/database", "@iris/prices", "@iris/utils"],
   // Node-only dependencies used by server code (auth route, oRPC handlers,
   // scheduler, AI pipeline): keep them external instead of bundling.
+  //
+  // `serverExternalPackages` externalises all imports of these packages
+  // (static and dynamic) so webpack leaves them as runtime `require()` /
+  // `import()` calls that Node resolves from `node_modules`. This is the
+  // correct mechanism for `await import("playwright")` in @iris/prices —
+  // a previous `IgnorePlugin`-based approach was wrong: returning `false`
+  // from `beforeResolve` makes webpack generate a stub that throws
+  // "Cannot find module" at runtime, rather than leaving the module external.
   serverExternalPackages: [
     "pg",
     "better-auth",
@@ -25,8 +33,24 @@ const nextConfig: NextConfig = {
     "@ai-sdk/google",
     "@ai-sdk/anthropic",
     "p-limit",
-    "wreq-js",
+    "playwright",
+    "playwright-core",
   ],
+  webpack: (
+    config: {
+      resolve?: { fallback?: Record<string, unknown> };
+    },
+    { isServer }: { isServer: boolean },
+  ) => {
+    if (isServer) {
+      config.resolve = config.resolve ?? {};
+      config.resolve.fallback = {
+        ...(config.resolve.fallback ?? {}),
+        electron: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
