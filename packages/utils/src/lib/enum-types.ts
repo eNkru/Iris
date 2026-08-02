@@ -14,6 +14,6 @@ export const channelTypeZodSchema = z.enum(CHANNEL_TYPE_VALUES);
 export type ChannelType = z.infer<typeof channelTypeZodSchema>;
 
 // AI provider registry (R6)
-export const AI_PROVIDER_VALUES = ["openai", "gemini", "anthropic"] as const;
+export const AI_PROVIDER_VALUES = ["openai", "gemini", "anthropic", "opencode"] as const;
 export const aiProviderZodSchema = z.enum(AI_PROVIDER_VALUES);
 export type AiProvider = z.infer<typeof aiProviderZodSchema>;

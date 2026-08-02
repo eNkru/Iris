@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AI_PROVIDER_VALUES } from "./enum-types";
 
 /**
  * Environment variables validated with Zod.
@@ -29,11 +30,19 @@ export const envSchema = z.object({
 
   // AI provider defaults (runtime/instance config is admin-editable and stored
   // in `global_settings`; these are build-time fallbacks)
-  AI_PROVIDER: z.enum(["openai", "gemini", "anthropic"]).default("openai"),
+  AI_PROVIDER: z.enum(AI_PROVIDER_VALUES).default("openai"),
   AI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_API_KEY: z.string().default(""),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().default(""),
   ANTHROPIC_API_KEY: z.string().default(""),
+  // OpenCode Zen — OpenAI-compatible gateway (provider "opencode"). The base
+  // URL is overridable so a different OpenAI-compatible endpoint can be used
+  // without a rebuild.
+  OPENCODE_API_KEY: z.string().default(""),
+  OPENCODE_BASE_URL: z
+    .string()
+    .url()
+    .default("https://opencode.ai/zen/v1"),
 
   // Telegram alert channel
   TELEGRAM_BOT_TOKEN: z.string().default(""),
