@@ -452,6 +452,79 @@ async function batchProcessWithProgress(
 }
 ```
 
+## Transport Fallback for Bot-Protected Pages
+
+Some retailers (e.g. Cloudflare-proxied shops like `pbtech.co.nz`) sit behind a
+Managed Security Challenge that fingerprints the HTTP/2 + TLS client. Node's
+native `fetch` (undici) is flagged → `403`/`503` for a perfectly valid request,
+and the page is never delivered. The price-extraction pipeline then fails on
+"Page fetch failed" and the create flow rolls the product row back.
+
+The fix is a **targeted transport fallback**, not retailer-specific code. Keep
+undici primary (no regression for retailers that already work) and retry the
+same URL with a browser-TLS impersonator only on a challenge status.
+
+### Pattern: undici-primary + browser-TLS fallback
+
+```typescript
+// packages/prices/src/pipeline/fetch-page.ts (abridged)
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const CHALLENGE_STATUS_CODES = new Set([403, 503, 529]);
+
+async function fetchPage(url: string, opts: FetchPageOptions) {
+  return pageFetchLimiter(async () => {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const result = await attemptUndiciFetch(url);
+
+      if (result.kind === "ok") return { html: result.html, url: result.url };
+
+      if (result.kind === "status" && CHALLENGE_STATUS_CODES.has(result.status)) {
+        // Only the challenge path takes the slow/expensive transport.
+        const tls = await fetchWithBrowserTls(url, opts);
+        if (tls) return tls;
+      }
+      // ... normal backoff / retry / null on total failure
+    }
+    return null;
+  });
+}
+```
+
+The fallback is loaded via **dynamic `import("wreq-js")`** so the native binding
+is only resolved on the challenge path — undici-only retailers never pay the
+load cost, and the import never throws at module init when the binding is
+absent (e.g. unsupported arch in dev).
+
+### Choice of impersonator
+
+`wreq-js` (Rust/NAPI, MIT) is the recommended choice: modern, fetch-compatible
+API, per-request browser profile, and prebuilt artifacts in the npm tarball for
+`linux-x64-gnu`, `linux-x64-musl`, `linux-arm64-gnu`, `linux-arm64-musl`,
+`darwin-x64`, `darwin-arm64`, `win32-x64`. No postinstall build script is
+required, so no `pnpm-workspace.yaml` `allowBuilds` entry is needed and no Rust
+toolchain is needed in the Docker image.
+
+The GPL-3.0 `node-tls-client` was rejected to keep the repo license-clean.
+
+### Required wiring
+
+- Add the package to the consuming package's `dependencies` and to
+  `apps/web/next.config.ts` `serverExternalPackages` so Next.js does not try to
+  bundle the `.node` file with server code.
+- The `User-Agent` header on the undici path should match the `browser` profile
+  used by the fallback (e.g. `chrome_130` ↔ a recent Chrome UA). Mismatched UA
+  on a Cloudflare-challenged response is a common reason the fallback also
+  fails.
+- Keep the shared `pLimit` and structured logging wrapping the fallback exactly
+  as the primary — observability must be consistent across both transports.
+
+### Anti-pattern: retailer-specific code
+
+Do NOT add a per-retailer branch like "if the URL contains pbtech.co.nz, use
+transport X". The challenge status code is a generic signal; any future
+Cloudflare-proxied retailer benefits from the same fallback. Branch only on
+the HTTP status, never on the hostname.
+
 ## Memory Optimization
 
 ### Streaming Large Datasets

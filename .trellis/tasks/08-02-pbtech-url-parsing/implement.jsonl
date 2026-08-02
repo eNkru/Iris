@@ -1,0 +1,2 @@
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/prd.md", "note": "Requirements R1-R4 and acceptance criteria (AC1-4)."}
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/design.md", "note": "Transport fallback architecture, wreq-js library choice, Dockerfile alpine risk."}

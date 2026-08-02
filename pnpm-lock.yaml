@@ -236,6 +236,9 @@ importers:
       p-limit:
         specifier: ^6.0.0
         version: 6.2.0
+      wreq-js:
+        specifier: ^2.3.1
+        version: 2.3.1
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -3323,6 +3326,11 @@ packages:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
 
+  wreq-js@2.3.1:
+    resolution: {integrity: sha512-vaKasaKeskrDKEuuO5Q5uamEG9a6FrF5ZSicH7TCvYS4RxF7/gzaU/vYqwJzcs+uydyJPVWY1KCvfVCgp0tiGA==}
+    cpu: [x64, arm64]
+    os: [darwin, linux, win32]
+
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
@@ -6314,6 +6322,8 @@ snapshots:
   wildcard-match@5.1.4: {}
 
   word-wrap@1.2.5: {}
+
+  wreq-js@2.3.1: {}
 
   xtend@4.0.2: {}
 

@@ -1,0 +1,3 @@
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/prd.md", "note": "Goal, confirmed root cause (Cloudflare Managed Security Challenge 403 vs undici), acceptance criteria."}
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/design.md", "note": "Transport fallback via browser-TLS lib (wreq-js recommended); keep undici primary."}
+{"role": "spec", "path": ".trellis/tasks/08-02-pbtech-url-parsing/implement.md", "note": "Checklist, validation commands, musl/alpine deploy risk gate."}

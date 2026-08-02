@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
     "@ai-sdk/google",
     "@ai-sdk/anthropic",
     "p-limit",
+    "wreq-js",
   ],
 };
 
