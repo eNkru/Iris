@@ -38,3 +38,37 @@ Implemented the price tracking & alert app end-to-end: 6-workspace monorepo (Nex
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Fix Playwright deployment: module resolution + glibc Docker base
+
+**Date**: 2026-08-03
+**Task**: Fix Playwright deployment: module resolution + glibc Docker base
+**Branch**: `feat/playwright-page-fetch`
+
+### Summary
+
+Fixed two deployment bugs preventing Playwright from running in Docker: (1) the custom ignorePlaywrightPlugin in next.config.ts was generating a throw stub instead of externalizing the module — removed it and relied on serverExternalPackages; (2) node:22-alpine (musl) cannot run Playwright's glibc-linked chromium binary — switched to node:22-bookworm-slim with playwright install --with-deps. Also added playwright to apps/web/package.json for runtime module resolution. Updated the performance spec to reflect the Playwright architecture.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc79974` | (see git log) |
+| `2dd1c05` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
