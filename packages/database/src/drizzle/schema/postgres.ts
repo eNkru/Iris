@@ -12,7 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AiModelOverride, AlertRules } from "@iris/utils";
-import { AI_PROVIDER_VALUES, CHANNEL_TYPE_VALUES } from "@iris/utils";
+import { CHANNEL_TYPE_VALUES } from "@iris/utils";
 import { user } from "./auth";
 
 /**
@@ -20,7 +20,6 @@ import { user } from "./auth";
  * imports the Zod schemas / types from utils, never from this package.
  */
 export const channelTypeEnum = pgEnum("channel_type", CHANNEL_TYPE_VALUES);
-export const aiProviderEnum = pgEnum("ai_provider", AI_PROVIDER_VALUES);
 
 /**
  * Tracked products (R4).
@@ -115,11 +114,13 @@ export const userSettings = pgTable("user_settings", {
 
 /**
  * Instance-level global settings — singleton row (id = 1), seeded by `db:seed`.
- * Admin-managed (R6, R7).
+ * Admin-managed (R6, R7). AI config is generic OpenAI-compatible: base URL +
+ * API key + model. The API key is masked on read (never returned in full).
  */
 export const globalSettings = pgTable("global_settings", {
   id: integer("id").primaryKey(),
-  aiProvider: aiProviderEnum("aiProvider").notNull().default("openai"),
+  aiBaseUrl: text("aiBaseUrl").notNull().default("https://api.openai.com/v1"),
+  aiApiKey: text("aiApiKey").notNull().default(""),
   aiModel: text("aiModel").notNull().default("gpt-4o-mini"),
   pollIntervalDefaultMinutes: integer("pollIntervalDefaultMinutes").notNull().default(60),
   telegramBotToken: text("telegramBotToken"),

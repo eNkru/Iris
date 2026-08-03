@@ -13,7 +13,6 @@ export const CHANNEL_TYPE_VALUES = ["telegram", "email"] as const;
 export const channelTypeZodSchema = z.enum(CHANNEL_TYPE_VALUES);
 export type ChannelType = z.infer<typeof channelTypeZodSchema>;
 
-// AI provider registry (R6)
-export const AI_PROVIDER_VALUES = ["openai", "gemini", "anthropic", "opencode"] as const;
-export const aiProviderZodSchema = z.enum(AI_PROVIDER_VALUES);
-export type AiProvider = z.infer<typeof aiProviderZodSchema>;
+// AI config is generic OpenAI-compatible (base URL + API key + model); there is
+// no provider enum. See packages/prices/src/pipeline/ai-extract.ts and
+// .trellis/spec/backend/ai-sdk-integration.md.

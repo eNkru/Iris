@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { AI_PROVIDER_VALUES, type AiProvider } from "@iris/utils/enum-types";
 import { useGlobalSettings, useUpdateGlobalSettings } from "../hooks/use-settings";
 import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
 
 /**
- * Instance-level global settings (R6/R7, admin only): AI provider + model +
- * default poll interval + Telegram bot token (write-only, masked on read).
+ * Instance-level global settings (R6/R7, admin only): generic OpenAI-compatible
+ * AI config (base URL + API key + model) + default poll interval + Telegram bot
+ * token. The AI API key and the bot token are write-only (masked on read);
+ * submitting an empty value leaves the stored secret unchanged.
  */
 export function AdminSettingsSection() {
   const { data, isLoading, isError, error } = useGlobalSettings();
   const updateGlobalSettings = useUpdateGlobalSettings();
 
-  const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
+  const [aiBaseUrl, setAiBaseUrl] = useState("https://api.openai.com/v1");
+  const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("");
   const [pollInterval, setPollInterval] = useState("");
   const [botToken, setBotToken] = useState("");
@@ -22,9 +24,10 @@ export function AdminSettingsSection() {
 
   useEffect(() => {
     if (data && !hasLoaded) {
-      setAiProvider(data.settings.aiProvider);
+      setAiBaseUrl(data.settings.aiBaseUrl);
       setAiModel(data.settings.aiModel);
       setPollInterval(data.settings.pollIntervalDefaultMinutes.toString());
+      setAiApiKey("");
       setBotToken("");
       setHasLoaded(true);
     }
@@ -41,12 +44,21 @@ export function AdminSettingsSection() {
     }
 
     try {
+      new URL(aiBaseUrl);
+    } catch {
+      setErrorMessage("AI base URL must be a valid URL (e.g. https://api.openai.com/v1).");
+      return;
+    }
+
+    try {
       await updateGlobalSettings.mutateAsync({
-        aiProvider,
+        aiBaseUrl,
         aiModel,
         pollIntervalDefaultMinutes: parsedInterval,
+        aiApiKey: aiApiKey.trim() === "" ? undefined : aiApiKey.trim(),
         telegramBotToken: botToken.trim() === "" ? undefined : botToken.trim(),
       });
+      setAiApiKey("");
       setBotToken("");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save global settings.");
@@ -66,20 +78,38 @@ export function AdminSettingsSection() {
       {!isLoading && !isError ? (
         <form onSubmit={onSubmit} className="max-w-md space-y-3">
           <div>
-            <Label htmlFor="ai-provider">AI provider</Label>
-            <select
-              id="ai-provider"
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-              value={aiProvider}
-              onChange={(e) => setAiProvider(e.target.value as AiProvider)}
+            <Label htmlFor="ai-base-url">AI base URL</Label>
+            <Input
+              id="ai-base-url"
+              type="url"
+              required
+              placeholder="https://api.openai.com/v1"
+              value={aiBaseUrl}
+              onChange={(e) => setAiBaseUrl(e.target.value)}
               disabled={updateGlobalSettings.isPending}
-            >
-              {AI_PROVIDER_VALUES.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
-                </option>
-              ))}
-            </select>
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Any OpenAI-compatible endpoint (OpenAI, OpenRouter, OpenCode Zen,
+              a local Llama/Ollama server, etc.).
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="ai-api-key">AI API key</Label>
+            <Input
+              id="ai-api-key"
+              type="password"
+              autoComplete="off"
+              placeholder="Leave empty to keep the stored key"
+              value={aiApiKey}
+              onChange={(e) => setAiApiKey(e.target.value)}
+              disabled={updateGlobalSettings.isPending}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              {data?.settings.aiApiKey
+                ? `Stored key: ${data.settings.aiApiKey}`
+                : "No key stored."}
+            </p>
           </div>
 
           <div>
@@ -88,11 +118,14 @@ export function AdminSettingsSection() {
               id="ai-model"
               type="text"
               required
-              placeholder="e.g. gpt-4o-mini, gemini-1.5-flash, claude-3-5-haiku"
+              placeholder="e.g. gpt-4o-mini, deepseek-v4-flash-free, llama3.1"
               value={aiModel}
               onChange={(e) => setAiModel(e.target.value)}
               disabled={updateGlobalSettings.isPending}
             />
+            <p className="mt-1 text-xs text-slate-400">
+              Must support tool calling (the model fetches the product page itself).
+            </p>
           </div>
 
           <div>

@@ -2,11 +2,10 @@
  * Shared query helper types.
  */
 
-import type { AiProvider } from "@iris/utils";
-
 export type GlobalSettingsRow = {
   id: number;
-  aiProvider: AiProvider;
+  aiBaseUrl: string;
+  aiApiKey: string;
   aiModel: string;
   pollIntervalDefaultMinutes: number;
   telegramBotToken: string | null;
@@ -15,7 +14,8 @@ export type GlobalSettingsRow = {
 };
 
 export type GlobalSettingsInput = {
-  aiProvider?: AiProvider;
+  aiBaseUrl?: string;
+  aiApiKey?: string;
   aiModel?: string;
   pollIntervalDefaultMinutes?: number;
   telegramBotToken?: string;

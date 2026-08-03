@@ -4,13 +4,28 @@ import { z } from "zod";
  * Structured output schema for AI price extraction (design.md pipeline step 2,
  * R5). `available: false` means the product is out of stock or no price is
  * visible on the page.
+ *
+ * Discriminated on `available`: when the model reports the product as
+ * available, `price`/`currency` are required; when unavailable, they may be
+ * null/absent (the model often returns `null` for fields it could not find).
+ * The pipeline never reads `price`/`currency` in the unavailable branch, so
+ * this lets an `available: false` response validate instead of failing on
+ * `price: null`.
  */
-export const priceExtractionSchema = z.object({
-  price: z.number().positive(),
-  currency: z.string().min(1).max(16),
-  name: z.string().min(1).optional(),
-  available: z.boolean(),
-});
+export const priceExtractionSchema = z.discriminatedUnion("available", [
+  z.object({
+    available: z.literal(true),
+    price: z.number().positive(),
+    currency: z.string().min(1).max(16),
+    name: z.string().min(1).optional(),
+  }),
+  z.object({
+    available: z.literal(false),
+    price: z.number().positive().nullable().optional(),
+    currency: z.string().min(1).max(16).nullable().optional(),
+    name: z.string().min(1).nullable().optional(),
+  }),
+]);
 
 export type PriceExtraction = z.infer<typeof priceExtractionSchema>;
 

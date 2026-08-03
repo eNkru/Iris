@@ -19,7 +19,7 @@ type ProductRow = typeof products.$inferSelect;
  *
  * ## Transactionality
  *
- * Network/AI calls (fetch + generateObject) run OUTSIDE any database
+ * Network/AI calls (fetch + generateText) run OUTSIDE any database
  * transaction so a slow page or model does not hold a connection. The
  * read-modify-write — load the product row, insert a `price_readings` row when
  * the price changed, update `currentPrice`/`lastCheckedAt` — runs inside a
@@ -47,7 +47,7 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
   const settings = await getGlobalSettings();
   const config = resolveAiConfig(settings);
   const extraction = config
-    ? await aiExtractPrice({ html: page.html, url: page.url, productId, config })
+    ? await aiExtractPrice({ url: page.url, productId, config })
     : null;
 
   if (!extraction) {

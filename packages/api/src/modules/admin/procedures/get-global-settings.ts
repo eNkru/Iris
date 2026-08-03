@@ -2,20 +2,21 @@ import { getGlobalSettings } from "@iris/database/drizzle/queries";
 import { adminProcedure } from "../../../orpc/procedures";
 import {
   getGlobalSettingsOutputSchema,
-  maskTelegramBotToken,
+  maskSecret,
 } from "../types";
 
 /**
- * Read the instance-level global settings (R6/R7). The Telegram bot token is
- * masked on read — the real value never leaves the server (design.md
- * "telegramBotToken — used server-side; masked on read").
+ * Read the instance-level global settings (R6/R7). The AI API key and the
+ * Telegram bot token are masked on read — the real values never leave the
+ * server. Defaults are returned for first-boot (unseeded DB) so the UI renders
+ * sensibly before `db:seed` runs.
  */
 export const getGlobalSettingsProcedure = adminProcedure
   .route({
     method: "GET",
     path: "/admin/global-settings",
     tags: ["Administration"],
-    summary: "Get global AI config and defaults (bot token masked)",
+    summary: "Get global AI config and defaults (secrets masked)",
   })
   .output(getGlobalSettingsOutputSchema)
   .handler(async () => {
@@ -25,10 +26,11 @@ export const getGlobalSettingsProcedure = adminProcedure
       success: true as const,
       reason: "Global settings fetched",
       settings: {
-        aiProvider: row?.aiProvider ?? "openai",
+        aiBaseUrl: row?.aiBaseUrl ?? "https://api.openai.com/v1",
+        aiApiKey: maskSecret(row?.aiApiKey ?? null),
         aiModel: row?.aiModel ?? "gpt-4o-mini",
         pollIntervalDefaultMinutes: row?.pollIntervalDefaultMinutes ?? 60,
-        telegramBotToken: maskTelegramBotToken(row?.telegramBotToken ?? null),
+        telegramBotToken: maskSecret(row?.telegramBotToken ?? null),
       },
     };
   });
