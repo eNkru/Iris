@@ -74,7 +74,40 @@ Fixed two deployment bugs preventing Playwright from running in Docker: (1) the 
 - None - task complete
 
 
-## Session 3: Anti-bot WAF detection (Farmers / Akamai)
+## Session 3: Generic OpenAI-compatible AI config
+
+**Date**: 2026-08-04
+**Task**: Generic OpenAI-compatible AI config
+**Branch**: `main`
+
+### Summary
+
+Replaced the 4-way AI provider enum (openai/gemini/anthropic/opencode) + per-provider SDK switch with a single generic OpenAI-compatible config (base URL + API key + model), all admin-editable in global_settings (key masked on read) with env fallbacks. Collapsed the 3 migrations into a single 0000_initial baseline. Unified the extraction pipeline on generateText + fetchPage tool (no generateObject branch). Fixed a schema-validation crash where DeepSeek's available:false + null price/name responses were rejected — priceExtractionSchema is now a discriminated union on available. Removed @ai-sdk/openai/google/anthropic deps. Updated .env.example, docker-compose, next.config, and the ai-sdk-integration spec. PR #4 merged to main. Also brainstormed (not yet implemented) a follow-up anti-bot-waf-bypass task for Akamai-protected retailers (Farmers serves a WAF deny page to headless Chromium).
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `074ddc1` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 4: Anti-bot WAF detection (Farmers / Akamai)
 
 **Date**: 2026-08-04
 **Task**: Anti-bot WAF detection (Farmers / Akamai)
