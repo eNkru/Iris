@@ -1,17 +1,19 @@
 import { z } from "zod";
-import { aiProviderZodSchema } from "@iris/utils";
 
 /**
  * Admin global settings module schemas (R6/R7 — instance-level AI config +
  * defaults, managed by the admin via `adminProcedure`).
  *
- * The Telegram bot token is write-only from the API's perspective: it is saved
- * on update and NEVER returned in full — `telegramBotToken` in outputs is a
- * masked placeholder (`••••••` + last 4 chars).
+ * The AI config is generic OpenAI-compatible: base URL + API key + model, all
+ * stored in `global_settings`. The API key and the Telegram bot token are
+ * write-only from the API's perspective: they are saved on update and NEVER
+ * returned in full — outputs return a masked placeholder (`••••••` + last 4
+ * chars) via `maskSecret`.
  */
 
 export const globalSettingsShapeSchema = z.object({
-  aiProvider: aiProviderZodSchema,
+  aiBaseUrl: z.string().url(),
+  aiApiKey: z.string().nullable(),
   aiModel: z.string(),
   pollIntervalDefaultMinutes: z.number().int(),
   telegramBotToken: z.string().nullable(),
@@ -26,7 +28,12 @@ export const getGlobalSettingsOutputSchema = z.object({
 export type GetGlobalSettingsOutput = z.infer<typeof getGlobalSettingsOutputSchema>;
 
 export const updateGlobalSettingsInputSchema = z.object({
-  aiProvider: aiProviderZodSchema.optional(),
+  aiBaseUrl: z.string().url().optional(),
+  /**
+   * When present and non-empty the key is saved; when absent/empty the stored
+   * key is left unchanged (never returned by GET, only the masked value).
+   */
+  aiApiKey: z.string().optional(),
   aiModel: z.string().min(1).optional(),
   pollIntervalDefaultMinutes: z.number().int().min(1).max(10080).optional(),
   /**
@@ -38,15 +45,16 @@ export const updateGlobalSettingsInputSchema = z.object({
 export type UpdateGlobalSettingsInput = z.infer<typeof updateGlobalSettingsInputSchema>;
 
 /**
- * Mask a stored bot token for API responses. Short/empty tokens degrade to a
- * fixed placeholder; longer tokens keep the last 4 chars for recognition.
+ * Mask a stored secret (API key, bot token) for API responses. Short/empty
+ * values degrade to a fixed placeholder; longer values keep the last 4 chars
+ * for recognition. The real value never leaves the server.
  */
-export function maskTelegramBotToken(token: string | null): string | null {
-  if (!token || token === "") {
+export function maskSecret(value: string | null): string | null {
+  if (!value || value === "") {
     return null;
   }
-  if (token.length <= 4) {
+  if (value.length <= 4) {
     return "••••••";
   }
-  return `••••••${token.slice(-4)}`;
+  return `••••••${value.slice(-4)}`;
 }

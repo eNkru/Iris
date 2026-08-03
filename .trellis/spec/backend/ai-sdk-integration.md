@@ -2,19 +2,24 @@
 
 ## 1. Overview
 
-This document covers backend integration patterns using the Vercel AI SDK (`ai` package) for AI-powered features.
+This document covers backend integration patterns using the Vercel AI SDK (`ai`
+package) for AI-powered features.
 
-### Supported Providers
-- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4-turbo
-- **Google Gemini**: gemini-1.5-pro, gemini-1.5-flash
-- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus
-- **OpenCode Zen** (`opencode`): OpenAI-compatible gateway
-  (`https://opencode.ai/zen/v1`), models like `deepseek-v4-flash-free`.
-  Built with `@ai-sdk/openai-compatible`.
+### Single provider model: generic OpenAI-compatible
+
+Iris uses **one** generic OpenAI-compatible provider. The operator configures a
+**base URL**, an **API key**, and a **model** — all stored in `global_settings`
+(admin-editable at runtime) with env fallbacks for seeding / first boot. Any
+OpenAI-compatible endpoint works: OpenAI, OpenRouter, OpenCode Zen, a local
+Llama/Ollama server, etc.
+
+There is no provider enum and no per-provider switch. Everything routes through
+`@ai-sdk/openai-compatible`'s `createOpenAICompatible`.
 
 ### Package Dependencies
+
 ```bash
-pnpm add ai @ai-sdk/openai @ai-sdk/google @ai-sdk/anthropic @ai-sdk/openai-compatible
+pnpm add ai @ai-sdk/openai-compatible
 ```
 
 > **CRITICAL version pin**: `@ai-sdk/openai-compatible` must stay on the `0.2.x`
@@ -23,18 +28,22 @@ pnpm add ai @ai-sdk/openai @ai-sdk/google @ai-sdk/anthropic @ai-sdk/openai-compa
 > (LanguageModelV1). Check the pinned `ai` version before bumping any
 > `@ai-sdk/*` package.
 
-### Env Contract (additive, all optional)
+### Config resolution (DB → env fallback)
+
+Config lives in `packages/utils/src/lib/env.ts` (`AI_BASE_URL`, `AI_API_KEY`,
+`AI_MODEL`) as build-time defaults, and in `global_settings` (`aiBaseUrl`,
+`aiApiKey`, `aiModel`) as instance-level overrides. The pipeline resolves
+`globalSettings → env` in `resolveAiConfig`
+(`packages/prices/src/pipeline/ai-extract.ts`). The API key is masked on read
+(`maskSecret`, never returned in full by `GET /admin/global-settings`).
+
+### Env Contract (additive, all optional — build-time fallbacks only)
 
 ```bash
-# OpenCode Zen — OpenAI-compatible provider "opencode"
-OPENCODE_API_KEY=""                          # empty → provider degrades to null
-OPENCODE_BASE_URL="https://opencode.ai/zen/v1"  # overridable without rebuild
+AI_BASE_URL="https://api.openai.com/v1"   # any OpenAI-compatible endpoint
+AI_API_KEY=""                              # empty → provider degrades to null
+AI_MODEL="gpt-4o-mini"
 ```
-
-Registry: `AI_PROVIDER_VALUES` in `packages/utils/src/lib/enum-types.ts` is the
-single source of truth. Always derive provider enums from it
-(`z.enum(AI_PROVIDER_VALUES)`, `pgEnum("ai_provider", AI_PROVIDER_VALUES)`) —
-never hardcode a `"openai" | "gemini" | ...` union, or the list drifts.
 
 ## 1a. CRITICAL: `ai@4.x` + zod v4 incompatibility
 
@@ -56,7 +65,7 @@ never hardcode a `"openai" | "gemini" | ...` union, or the list drifts.
 > `validate` option. Pattern (see `packages/prices/src/pipeline/ai-extract.ts`):
 
 ```typescript
-import { generateObject, jsonSchema } from "ai";
+import { jsonSchema } from "ai";
 
 function aiSchema() {
   return jsonSchema<PriceExtraction>(
@@ -73,15 +82,12 @@ function aiSchema() {
     },
   );
 }
-
-const { object } = await generateObject<PriceExtraction>({
-  model,
-  schema: aiSchema(),
-  prompt,
-});
 ```
 
-## 1b. Gotcha: DeepSeek thinking models reject `tool_choice`
+Tool `parameters` must also use the zod-v4-native `toJSONSchema` trick —
+`tool()` routes parameters through the same broken `zodSchema()` path.
+
+## 1b. Gotcha: thinking models reject `tool_choice`
 
 Zen routes open-source models (e.g. `deepseek-v4-flash-free`) to DeepSeek,
 whose **thinking mode** rejects the *required* `tool_choice` that
@@ -91,23 +97,30 @@ whose **thinking mode** rejects the *required* `tool_choice` that
 Error from provider (DeepSeek): Thinking mode does not support this tool_choice
 ```
 
-Two workarounds exist; which one to use depends on whether the extraction needs
-web access (see 1d):
+**Fix (the path Iris uses everywhere)**: `generateText` with `tools`, whose
+default `tool_choice` is `"auto"` — accepted by thinking models. Have the model
+return strict JSON and validate it yourself with `priceExtractionSchema` (see
+§1d). Iris no longer has a `generateObject` branch — the fetch-tool path is the
+single extraction path.
 
-1. **Plain structured output, no tools**: `generateObject` with `mode: "json"`
-   (sends `response_format` instead of tool calling):
-   ```typescript
-   mode: config.provider === "opencode" ? "json" : "auto",
-   ```
-2. **Structured output + tools**: `generateObject` + `tools` is blocked. Use
-   `generateText` with `tools` instead — its default tool_choice is "auto",
-   which thinking models accept. Have the model return strict JSON and validate
-   it yourself (see 1d).
+## 1c. Gotcha: page truncation can hide the price
+
+A naïve extraction path truncates raw HTML to fit the prompt (e.g. 40k chars).
+Some sites (e.g. Bunnings NZ) emit megabytes of CSS-in-JS before the actual
+price markup, so the truncated prompt contains no price → the model correctly
+reports `available: false`. This is a pipeline/prompt characteristic, not an AI
+bug.
+
+Iris avoids this entirely: the model fetches the page itself via the
+`fetchPage` tool (§1d), which returns a compact reduction — visible text plus
+any embedded price JSON (React-Query/Next.js pages hydrate
+`{"formattedValue":"$119.00","value":119}` into `<script>` blobs). No raw HTML
+is put in the prompt.
 
 ## 1d. Gotcha: a bare model call has NO web access
 
-A model called through `/chat/completions` (what `createOpenAICompatible` sends)
-cannot visit websites — it will honestly report *"I can't visit live
+A model called through `/chat/completions` (what `createOpenAICompatible`
+sends) cannot visit websites — it will honestly report *"I can't visit live
 websites"*. This is **not** a model limitation: the OpenCode TUI works because
 it wires up a `webfetch` tool. To give a model web access, pass it a fetch tool:
 
@@ -128,104 +141,96 @@ const result = await generateText({
 });
 ```
 
-- Tool `parameters` must also use the zod-v4-native `toJSONSchema` trick (1a) —
-  `tool()` routes parameters through the same broken `zodSchema()` path.
+- Tool `parameters` must use the zod-v4-native `toJSONSchema` trick (1a).
 - Parse the strict JSON out of `result.text` and validate with
   `priceExtractionSchema.safeParse` yourself; `generateText` does not validate.
-- `generateObject` + `tools` fails on DeepSeek thinking (1b), so the fetch-tool
-  path must use `generateText`. Other providers keep `generateObject` (no tools)
-  — see `aiExtractPrice` in `packages/prices/src/pipeline/ai-extract.ts`.
+- This is the **only** extraction path in Iris — see `aiExtractPrice` in
+  `packages/prices/src/pipeline/ai-extract.ts`.
 
-## 1c. Gotcha: page truncation can hide the price
+## 2. Provider construction
 
-`buildExtractionPrompt` truncates HTML to `MAX_PROMPT_HTML_CHARS = 40_000`.
-Some sites (e.g. Bunnings NZ) emit megabytes of CSS-in-JS before the actual
-price markup, so the truncated prompt contains no price → the model correctly
-reports `available: false`. This is a pipeline/prompt characteristic, not an AI
-bug — verify a real page's price appears within the truncation window before
-assuming extraction failure.
+Build the model from the resolved config. Return `null` on an empty API key so
+the pipeline degrades to a logged no-op instead of throwing.
 
-The `opencode` path avoids this entirely: the model fetches the page itself via
-the `fetchPage` tool (1d), which returns a compact reduction — visible text
-plus any embedded price JSON (React-Query/Next.js pages hydrate
-`{"formattedValue":"$119.00","value":119}` into `<script>` blobs).
+```typescript
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import type { LanguageModel } from "ai";
 
-## 2. Basic Usage
+function createModel(config: ResolvedAiConfig): LanguageModel | null {
+  if (config.apiKey === "") return null;
+  return createOpenAICompatible({
+    name: "iris",
+    baseURL: config.baseUrl,
+    apiKey: config.apiKey,
+  })(config.model);
+}
+```
 
-### generateText
+## 3. Basic Usage
 
-Use `generateText` for simple text generation tasks where you need a complete response.
+### generateText (with a fetch tool — the Iris extraction path)
+
+```typescript
+import { generateText, tool, jsonSchema } from "ai";
+
+const result = await generateText({
+  model,
+  maxSteps: 5,
+  tools: { fetchPage: buildFetchPageTool() },
+  prompt: buildToolExtractionPrompt(url),
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: "prices.extract",
+    metadata: { productId, url },
+  },
+});
+
+const extraction = parseExtractionJson(result.text); // validates with priceExtractionSchema
+```
+
+### generateObject (structured output) — NOT used by Iris
+
+`generateObject` is incompatible with thinking models (§1b) and puts raw HTML
+in the prompt (§1c). Iris uses `generateText` + the `fetchPage` tool instead.
+Only reach for `generateObject` if you add a feature whose model is known not
+to be a thinking model AND whose input is already compact (not a web page).
+
+## 4. Tool Calling
+
+Define tools the model can invoke. Tool `parameters` MUST use the zod-v4
+`toJSONSchema` trick (§1a). See `buildFetchPageTool` in `ai-extract.ts`.
+
+```typescript
+import { tool, jsonSchema } from "ai";
+import { z } from "zod";
+
+const paramsSchema = z.object({ url: z.string().url() });
+
+const fetchPageTool = tool({
+  description: "Fetch a web page and return a compact representation of its content.",
+  parameters: jsonSchema<{ url: string }>(
+    paramsSchema.toJSONSchema({ target: "draft-07" }) as unknown as Parameters<typeof jsonSchema>[0],
+  ),
+  execute: async ({ url }) => reducePageHtml(await fetchText(url)),
+});
+```
+
+## 5. Telemetry Configuration
+
+**IMPORTANT**: Always enable telemetry for token tracking and performance
+monitoring.
 
 ```typescript
 import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
 
-const { text } = await generateText({
-  model: openai("gpt-4o-mini"),
-  prompt: "Summarize this document...",
-});
-```
-
-### generateObject (Structured Output with Zod)
-
-Use `generateObject` when you need type-safe structured output. The AI SDK validates the response against your Zod schema automatically.
-
-```typescript
-import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
-const classificationSchema = z.object({
-  category: z.enum(["urgent", "normal", "low"]),
-  confidence: z.number().min(0).max(1),
-  reasoning: z.string(),
-});
-
-const { object } = await generateObject({
-  model: openai("gpt-4o-mini"),
-  schema: classificationSchema,
-  prompt: "Classify the priority of this task...",
-});
-// object is typed as { category: "urgent" | "normal" | "low", confidence: number, reasoning: string }
-```
-
-### streamText (For SSE/Streaming)
-
-Use `streamText` for real-time streaming responses, ideal for chat interfaces and long-form content generation.
-
-```typescript
-import { streamText } from "ai";
-import { openai } from "@ai-sdk/openai";
-
-const result = streamText({
-  model: openai("gpt-4o"),
-  messages: conversationHistory,
-  system: "You are a helpful assistant.",
-});
-
-// Return as SSE stream
-return result.toDataStreamResponse();
-```
-
-## 3. Telemetry Configuration
-
-**IMPORTANT**: Always enable telemetry for token tracking and performance monitoring.
-
-```typescript
-import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
-
-const { object } = await generateObject({
-  model: openai("gpt-4o-mini"),
-  schema: mySchema,
+const result = await generateText({
+  model,
+  tools: { fetchPage },
   prompt,
   experimental_telemetry: {
     isEnabled: true,
-    functionId: "orders.classify",  // Module.function naming
-    metadata: {
-      orderId,
-      userId,
-    },
+    functionId: "prices.extract", // Module.function naming
+    metadata: { productId, url },
   },
 });
 ```
@@ -236,116 +241,44 @@ Use dot-separated format for `functionId`: `module.function`
 
 | Module | Example functionId |
 |--------|-------------------|
-| Orders | `orders.classify`, `orders.summarize` |
-| Support | `support.generateReply`, `support.categorize` |
-| Content | `content.summarize`, `content.translate` |
-| Users | `users.analyzePreferences` |
+| Prices | `prices.extract` |
+| Support | `support.generateReply` |
+| Content | `content.summarize` |
 
 ### Auto-recorded Metrics
 
-When telemetry is enabled, these metrics are automatically tracked:
-
 | Metric | Description |
 |--------|-------------|
-| `ai.model.id` | Model identifier (e.g., gpt-4o-mini) |
-| `ai.model.provider` | Provider name (e.g., openai) |
+| `ai.model.id` | Model identifier (e.g. gpt-4o-mini) |
+| `ai.model.provider` | Provider name (e.g. iris) |
 | `ai.usage.prompt_tokens` | Input tokens consumed |
 | `ai.usage.completion_tokens` | Output tokens generated |
 | `ai.usage.total_tokens` | Total tokens used |
 | `ai.response.finish_reason` | Completion reason (stop, length, etc.) |
 
-## 4. Tool Calling
+## 6. Error Handling
 
-Define tools that the AI model can invoke to perform actions in your system.
+Never throw out of the AI path — every failure (missing key, AI error, schema
+mismatch) is logged and `null` is returned so the pipeline records a failed
+check instead of crashing.
 
 ```typescript
-import { generateText, tool } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
-const result = await generateText({
-  model: openai("gpt-4o"),
-  prompt: "Create a task for the user...",
-  tools: {
-    createTask: tool({
-      description: "Create a new task in the system",
-      parameters: z.object({
-        title: z.string(),
-        dueDate: z.string().optional(),
-        priority: z.enum(["high", "medium", "low"]),
-      }),
-      execute: async ({ title, dueDate, priority }) => {
-        const task = await db.insert(tasks).values({
-          title,
-          dueDate: dueDate ? new Date(dueDate) : null,
-          priority,
-        }).returning();
-        return { success: true, taskId: task[0].id };
-      },
-    }),
-    searchOrders: tool({
-      description: "Search for orders by criteria",
-      parameters: z.object({
-        query: z.string(),
-        status: z.enum(["pending", "completed", "cancelled"]).optional(),
-        limit: z.number().default(10),
-      }),
-      execute: async ({ query, status, limit }) => {
-        const orders = await db.query.orders.findMany({
-          where: and(
-            like(orders.title, `%${query}%`),
-            status ? eq(orders.status, status) : undefined
-          ),
-          limit,
-        });
-        return { orders };
-      },
-    }),
-  },
-});
-
-// Access tool results
-if (result.toolCalls) {
-  for (const toolCall of result.toolCalls) {
-    console.log(`Tool: ${toolCall.toolName}`, toolCall.result);
+async function extractPrice(url: string, config: ResolvedAiConfig, productId?: string) {
+  const model = createModel(config);
+  if (!model) {
+    logger.warn("AI provider not configured (missing API key)", { productId, url });
+    return null;
   }
-}
-```
-
-## 5. Error Handling
-
-Always implement graceful error handling for AI operations.
-
-```typescript
-import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { logger } from "@your-app/logs";
-
-async function classifyOrder(orderData: OrderData) {
   try {
-    const { object } = await generateObject({
-      model: openai("gpt-4o-mini"),
-      schema: classificationSchema,
-      prompt: buildClassificationPrompt(orderData),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "orders.classify",
-      },
-    });
-    return { success: true, data: object };
+    return await extractWithFetchTool(model, url, productId);
   } catch (error) {
-    logger.error("AI generation failed", {
-      error,
-      orderId: orderData.id,
-      prompt: buildClassificationPrompt(orderData).slice(0, 100)
+    logger.error("AI price extraction failed", {
+      model: config.model,
+      productId,
+      url,
+      error: error instanceof Error ? error.message : String(error),
     });
-
-    // Return graceful fallback
-    return {
-      success: false,
-      reason: "AI processing failed",
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
+    return null;
   }
 }
 ```
@@ -355,152 +288,69 @@ async function classifyOrder(orderData: OrderData) {
 | Error | Cause | Resolution |
 |-------|-------|------------|
 | Rate limit exceeded | Too many requests | Implement exponential backoff |
-| Context length exceeded | Prompt too long | Truncate or summarize input |
-| Invalid API key | Missing/wrong credentials | Check environment variables |
-| Schema validation failed | AI output doesn't match schema | Adjust schema or prompt |
+| Context length exceeded | Prompt too long | Use the fetch-tool path (compact reduction) |
+| Invalid API key | Missing/wrong credentials | Set `AI_API_KEY` (env) or via admin UI |
+| Schema validation failed | AI output doesn't match schema | Tighten `buildToolExtractionPrompt` |
+| Thinking mode does not support this tool_choice | Used `generateObject` with tools | Use `generateText` (§1b) |
 
-## 6. Prompt Engineering Best Practices
+## 7. Prompt Engineering
 
-### Use XML Structure for Complex Prompts
-
-XML tags help the AI model better understand the structure of your request.
+### XML structure for complex prompts
 
 ```typescript
 const prompt = `
-<context>
-${contextData}
-</context>
-
-<task>
-Analyze the above context and extract key information.
-</task>
-
-<output_format>
-Return a JSON object with the following fields:
-- summary: A brief summary
-- keyPoints: Array of key points
-- sentiment: positive, negative, or neutral
-</output_format>
+<context>${contextData}</context>
+<task>Extract key information.</task>
+<output_format>Return a JSON object...</output_format>
 `;
 ```
 
-### System Prompts
-
-Define consistent behavior with system prompts.
+### Strict-JSON tool prompt (the Iris extraction shape)
 
 ```typescript
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
+function buildToolExtractionPrompt(url: string): string {
+  return `
+Product URL: ${url}
 
-const result = await generateText({
-  model: openai("gpt-4o"),
-  system: `You are a professional assistant.
-Always respond in a structured format.
-Be concise and accurate.
-Never make up information - if unsure, say so.`,
-  messages: userMessages,
-});
+Call the fetchPage tool to load the product page. The tool returns a compact
+representation of the page content, including any embedded price data.
+
+Extract the current selling price of the single product on this page, its
+currency, and its name. If the page shows the product as out of stock, or no
+price is visible anywhere in the page content, set "available" to false.
+
+Return ONLY a single JSON object — no prose, no markdown — exactly matching
+this shape:
+{"price": 119, "currency": "NZD", "name": "Product name", "available": true}
+`;
+}
 ```
 
-### Multi-step Prompts
-
-For complex tasks, break down into multiple AI calls.
-
-```typescript
-// Step 1: Extract entities
-const { object: entities } = await generateObject({
-  model: openai("gpt-4o-mini"),
-  schema: entitiesSchema,
-  prompt: `Extract entities from: ${document}`,
-});
-
-// Step 2: Classify based on entities
-const { object: classification } = await generateObject({
-  model: openai("gpt-4o-mini"),
-  schema: classificationSchema,
-  prompt: `
-<entities>
-${JSON.stringify(entities, null, 2)}
-</entities>
-
-<task>
-Based on these entities, classify the document category.
-</task>
-`,
-});
-```
-
-## 7. Provider-Specific Configuration
-
-### OpenAI
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-
-const model = openai("gpt-4o-mini", {
-  // Optional: custom configuration
-});
-```
-
-### Google Gemini
-
-```typescript
-import { google } from "@ai-sdk/google";
-
-const model = google("gemini-1.5-flash");
-```
-
-### Anthropic
-
-```typescript
-import { anthropic } from "@ai-sdk/anthropic";
-
-const model = anthropic("claude-3-5-sonnet-20241022");
-```
-
-### OpenCode Zen (OpenAI-compatible)
-
-```typescript
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-
-const model = createOpenAICompatible({
-  name: "opencode",
-  baseURL: getEnv().OPENCODE_BASE_URL,
-  apiKey: getEnv().OPENCODE_API_KEY,
-})(getEnv().AI_MODEL);
-```
-
-Missing key (`OPENCODE_API_KEY === ""`) → `createModel` returns `null` and the
-pipeline logs "AI provider not configured" instead of throwing.
+Parse + validate the response yourself (`parseExtractionJson` in `ai-extract.ts`).
 
 ## 8. Best Practices Summary
 
 | Rule | Description |
 |------|-------------|
 | Always enable telemetry | Track token usage and performance for cost monitoring |
-| Use generateObject for structured output | Leverage Zod schemas for type safety and validation |
-| Use XML prompts for complex tasks | Better structure improves AI understanding |
-| Handle errors gracefully | Return fallback responses, never crash |
-| Log AI failures | Include context (truncated prompt, IDs) for debugging |
-| Use appropriate model sizes | Use mini models for simple tasks, larger for complex |
-| Implement rate limiting | Protect against API quota exhaustion |
-| Cache responses when appropriate | Reduce costs for repeated queries |
+| Use the fetch-tool path | `generateText` + `fetchPage` tool; avoids truncation (1c) and works with thinking models (1b) |
+| Validate model JSON yourself | `generateText` does not validate; use `priceExtractionSchema.safeParse` |
+| Use the zod-v4 `toJSONSchema` trick | For tool `parameters` and any `jsonSchema()` (1a) |
+| Handle errors gracefully | Return `null` on failure, never crash the pipeline |
+| Log AI failures | Include model, productId, url, and error message |
+| Pin `@ai-sdk/openai-compatible` to 0.2.x | 1.x is incompatible with `ai@4.x` |
 
 ## 9. Environment Variables
 
-Required environment variables for AI providers:
-
 ```bash
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Google Gemini
-GOOGLE_GENERATIVE_AI_API_KEY=...
-
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenCode Zen (provider "opencode")
-OPENCODE_API_KEY=sk-zen-...
-OPENCODE_BASE_URL=https://opencode.ai/zen/v1
+# Generic OpenAI-compatible config — build-time fallbacks (instance config
+# is admin-editable in global_settings).
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=
+AI_MODEL=gpt-4o-mini
 ```
+
+There are no per-provider env vars (`OPENAI_API_KEY`, `GOOGLE_*`,
+`ANTHROPIC_API_KEY`, `OPENCODE_*` are gone). To use a non-OpenAI model, point
+`AI_BASE_URL` at an OpenAI-compatible gateway (OpenRouter, OpenCode Zen, a
+local Ollama server, etc.).

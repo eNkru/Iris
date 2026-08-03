@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { aiProviderZodSchema } from "./enum-types";
 
 /**
  * Shared Zod schemas for the standard API response format.
@@ -53,11 +52,11 @@ export type AlertRules = z.infer<typeof alertRulesSchema>;
 
 /**
  * Reserved per-user AI model override (R6). `null` = use global config.
- * Schema-ready for a later phase; not exposed in the MVP UI.
+ * Schema-ready for a later phase; not exposed in the MVP UI. Only the model is
+ * overridable per user — base URL and API key are instance-level.
  */
 export const aiModelOverrideSchema = z
   .object({
-    provider: aiProviderZodSchema.optional(),
     model: z.string().min(1).optional(),
   })
   .nullable();

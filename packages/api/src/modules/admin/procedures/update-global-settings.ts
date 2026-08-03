@@ -6,14 +6,15 @@ import {
 import { adminProcedure } from "../../../orpc/procedures";
 import {
   getGlobalSettingsOutputSchema,
-  maskTelegramBotToken,
+  maskSecret,
   updateGlobalSettingsInputSchema,
 } from "../types";
 
 /**
  * Update the instance-level global settings (singleton row id = 1). Fields are
  * merged over the stored values, so partial updates never clobber the rest.
- * The bot token is saved only when non-empty and always masked in the response.
+ * The AI API key and the Telegram bot token are write-only: saved only when a
+ * non-empty value is submitted, and always masked in the response.
  */
 export const updateGlobalSettingsProcedure = adminProcedure
   .route({
@@ -28,12 +29,16 @@ export const updateGlobalSettingsProcedure = adminProcedure
     const row = await getGlobalSettings();
 
     const merged: GlobalSettingsInput = {
-      aiProvider: input.aiProvider ?? row?.aiProvider ?? "openai",
+      aiBaseUrl: input.aiBaseUrl ?? row?.aiBaseUrl ?? "https://api.openai.com/v1",
       aiModel: input.aiModel ?? row?.aiModel ?? "gpt-4o-mini",
       pollIntervalDefaultMinutes:
         input.pollIntervalDefaultMinutes ?? row?.pollIntervalDefaultMinutes ?? 60,
     };
 
+    // Write-only secrets: save only when a non-empty value is submitted.
+    if (input.aiApiKey !== undefined && input.aiApiKey.trim() !== "") {
+      merged.aiApiKey = input.aiApiKey;
+    }
     if (input.telegramBotToken !== undefined && input.telegramBotToken.trim() !== "") {
       merged.telegramBotToken = input.telegramBotToken;
     }
@@ -44,11 +49,12 @@ export const updateGlobalSettingsProcedure = adminProcedure
       success: true as const,
       reason: "Global settings updated",
       settings: {
-        aiProvider: updated?.aiProvider ?? merged.aiProvider ?? "openai",
+        aiBaseUrl: updated?.aiBaseUrl ?? merged.aiBaseUrl ?? "https://api.openai.com/v1",
+        aiApiKey: maskSecret(updated?.aiApiKey ?? null),
         aiModel: updated?.aiModel ?? merged.aiModel ?? "gpt-4o-mini",
         pollIntervalDefaultMinutes:
           updated?.pollIntervalDefaultMinutes ?? merged.pollIntervalDefaultMinutes ?? 60,
-        telegramBotToken: maskTelegramBotToken(updated?.telegramBotToken ?? null),
+        telegramBotToken: maskSecret(updated?.telegramBotToken ?? null),
       },
     };
   });

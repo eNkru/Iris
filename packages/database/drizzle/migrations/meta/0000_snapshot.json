@@ -1,5 +1,5 @@
 {
-  "id": "01fd2b1c-dca2-45a9-87b3-c2ec136cb4a2",
+  "id": "b4626443-2dd2-4a86-bf60-b273037a5870",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -432,13 +432,19 @@
           "primaryKey": true,
           "notNull": true
         },
-        "aiProvider": {
-          "name": "aiProvider",
-          "type": "ai_provider",
-          "typeSchema": "public",
+        "aiBaseUrl": {
+          "name": "aiBaseUrl",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'openai'"
+          "default": "'https://api.openai.com/v1'"
+        },
+        "aiApiKey": {
+          "name": "aiApiKey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
         },
         "aiModel": {
           "name": "aiModel",
@@ -759,15 +765,6 @@
     }
   },
   "enums": {
-    "public.ai_provider": {
-      "name": "ai_provider",
-      "schema": "public",
-      "values": [
-        "openai",
-        "gemini",
-        "anthropic"
-      ]
-    },
     "public.channel_type": {
       "name": "channel_type",
       "schema": "public",

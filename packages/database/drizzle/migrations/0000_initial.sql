@@ -1,4 +1,3 @@
-CREATE TYPE "public"."ai_provider" AS ENUM('openai', 'gemini', 'anthropic');--> statement-breakpoint
 CREATE TYPE "public"."channel_type" AS ENUM('telegram', 'email');--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -61,7 +60,8 @@ CREATE TABLE "alert_channels" (
 --> statement-breakpoint
 CREATE TABLE "global_settings" (
 	"id" integer PRIMARY KEY NOT NULL,
-	"aiProvider" "ai_provider" DEFAULT 'openai' NOT NULL,
+	"aiBaseUrl" text DEFAULT 'https://api.openai.com/v1' NOT NULL,
+	"aiApiKey" text DEFAULT '' NOT NULL,
 	"aiModel" text DEFAULT 'gpt-4o-mini' NOT NULL,
 	"pollIntervalDefaultMinutes" integer DEFAULT 60 NOT NULL,
 	"telegramBotToken" text,
