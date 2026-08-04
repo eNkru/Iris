@@ -72,3 +72,36 @@ Fixed two deployment bugs preventing Playwright from running in Docker: (1) the 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Anti-bot WAF detection (Farmers / Akamai)
+
+**Date**: 2026-08-04
+**Task**: Anti-bot WAF detection (Farmers / Akamai)
+**Branch**: `feat/anti-bot-waf-detection`
+
+### Summary
+
+Shipped detection-only anti-bot WAF handling for the price pipeline after two Farmers spike rounds failed free/local stealth. Added blocked-signatures (akamai-waf, access-denied, behavioral-challenge), short-circuit in checkPrice, performance.md update, branch/PR #5, archived 08-04-anti-bot-waf-bypass.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb15ab2` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
