@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
-- **Last Active**: 2026-08-04
+- **Total Sessions**: 5
+- **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~140 | Active |
+| `journal-1.md` | ~174 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-08-05 | Camoufox-only fetch transport (hard anti-bot bypass) | `f922440`, `99864f2` | `main` |
 | 4 | 2026-08-04 | Anti-bot WAF detection (Farmers / Akamai) | `bb15ab2` | `feat/anti-bot-waf-detection` |
 | 3 | 2026-08-04 | Generic OpenAI-compatible AI config | `074ddc1` | `main` |
 | 2 | 2026-08-03 | Fix Playwright deployment: module resolution + glibc Docker base | `dc79974`, `2dd1c05` | `feat/playwright-page-fetch` |

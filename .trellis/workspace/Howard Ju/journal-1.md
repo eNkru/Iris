@@ -138,3 +138,37 @@ Shipped detection-only anti-bot WAF handling for the price pipeline after two Fa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Camoufox-only fetch transport (hard anti-bot bypass)
+
+**Date**: 2026-08-05
+**Task**: Camoufox-only fetch transport (hard anti-bot bypass)
+**Branch**: `main`
+
+### Summary
+
+Replaced Playwright Chromium with a required Camoufox sidecar as the single page-fetch transport so DataDome (kogan), Cloudflare managed (noelleeming), and Akamai (farmers) PDPs can be added. Extended blocked-signatures for DataDome/Cloudflare (tightened to avoid Turnstile false positives on pbtech), rewrote fetch-page as a sidecar HTTP client with ok/blocked/null results, switched checkPrice AI extract to preloaded HTML (single generateText) to avoid DeepSeek multi-step reasoning_content failures, removed Playwright from the app image, and shipped camoufox/ + compose wiring. PR #6 merged to main.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f922440` | (see git log) |
+| `99864f2` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
