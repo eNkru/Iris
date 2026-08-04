@@ -9,14 +9,24 @@ import { priceExtractionSchema, type PriceExtraction } from "./types";
 import { fetchPage } from "./fetch-page";
 
 /**
- * AI price extraction via `generateText` + a `fetchPage` tool
- * (ai-sdk-integration.md §1b/1d).
+ * AI price extraction via `generateText` (ai-sdk-integration.md §1b/1d/1e).
  *
  * The AI config is generic OpenAI-compatible: base URL + API key + model, all
  * stored in `global_settings` (admin-editable). The pipeline resolves config as
  * DB → env fallback (R6). The API key is the only secret; when it is empty in
  * both the DB and the environment, extraction degrades to a logged no-op
  * instead of throwing.
+ *
+ * Preferred path (used by `checkPrice`): the page HTML is already fetched by
+ * the Camoufox sidecar and passed in. Extraction is a **single** `generateText`
+ * call with the reduced page content in the prompt — no tools, no multi-step
+ * loop. That avoids a known DeepSeek thinking-mode failure where multi-step
+ * tool rounds drop `reasoning_content` on the way back to the API
+ * (`@ai-sdk/openai-compatible@0.2.x` does not re-encode reasoning parts;
+ * DeepSeek then returns 400 — see §1e).
+ *
+ * Fallback path: when no HTML is provided, the model may call a `fetchPage`
+ * tool (`maxSteps > 1`). Prefer the preloaded path for production checks.
  */
 
 export interface ResolvedAiConfig {
@@ -65,10 +75,10 @@ function createModel(config: ResolvedAiConfig): LanguageModel | null {
 
 /**
  * Reduce a raw product page to the pieces most likely to carry a price, so the
- * fetch tool result stays small enough for the model context: the visible text
- * plus any embedded JSON blobs that client-side-rendered shops (React/Next.js
- * etc.) hydrate prices into. This is what makes pages whose price is not in the
- * server HTML readable at all, and avoids the truncation gotcha (§1c).
+ * model context stays small: the visible text plus any embedded JSON blobs that
+ * client-side-rendered shops (React/Next.js etc.) hydrate prices into. This is
+ * what makes pages whose price is not in the server HTML readable at all, and
+ * avoids the truncation gotcha (§1c).
  */
 function reducePageHtml(html: string): string {
   const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)]
@@ -96,11 +106,8 @@ function reducePageHtml(html: string): string {
 }
 
 /**
- * Build the `fetchPage` tool. The tool reuses the pipeline's own page fetcher
- * (retries, backoff, concurrency limiter) and returns a compact reduction of
- * the page so the model can read the price itself — mirroring the web-fetch
- * capability the model has in the OpenCode TUI, which a bare
- * `/chat/completions` call lacks (§1d).
+ * Build the `fetchPage` tool (fallback path only). The tool reuses the
+ * pipeline's own page fetcher and returns a compact reduction of the page.
  */
 function buildFetchPageTool() {
   const paramsSchema = z.object({ url: z.string().url() });
@@ -114,11 +121,41 @@ function buildFetchPageTool() {
     execute: async ({ url }) => {
       const page = await fetchPage(url);
       if (!page) {
+        // Transport failed after retries (sidecar down, network error). The
+        // model sees an explicit error string so it does not hallucinate a
+        // price from missing content.
         return "ERROR: failed to fetch the page.";
+      }
+      if (page.kind === "blocked") {
+        // Anti-bot challenge / deny page: no real content to extract from.
+        // Surface the signature so the model does not invent a price.
+        return `BLOCKED: ${page.signature}`;
       }
       return reducePageHtml(page.html);
     },
   });
+}
+
+function buildPageContentExtractionPrompt(url: string, pageContent: string): string {
+  return `
+Product URL: ${url}
+
+The product page has already been fetched. Below is a compact representation of
+its content (visible text plus any embedded price data).
+
+Extract the current selling price of the single product on this page, its
+currency, and its name. If the page shows the product as out of stock, or no
+price is visible anywhere in the page content, set "available" to false and
+use null for the fields you could not determine.
+
+Return ONLY a single JSON object — no prose, no markdown — exactly matching
+one of these shapes:
+{"price": 119, "currency": "NZD", "name": "Product name", "available": true}
+{"price": null, "currency": null, "name": null, "available": false}
+
+PAGE CONTENT:
+${pageContent}
+`;
 }
 
 function buildToolExtractionPrompt(url: string): string {
@@ -159,12 +196,42 @@ function parseExtractionJson(text: string): PriceExtraction {
 }
 
 /**
- * Extract a price reading using `generateText` with a `fetchPage` tool.
+ * Preferred extraction path: page HTML is already in hand (from `fetchPage` /
+ * the Camoufox sidecar). Single `generateText` call, no tools — avoids the
+ * multi-step `reasoning_content` round-trip failure on DeepSeek thinking
+ * models (§1e) and skips a redundant second fetch.
+ */
+async function extractFromPageContent(
+  model: LanguageModel,
+  url: string,
+  html: string,
+  productId: string | undefined,
+): Promise<PriceExtraction> {
+  const pageContent = reducePageHtml(html);
+  const result = await generateText({
+    model,
+    prompt: buildPageContentExtractionPrompt(url, pageContent),
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "prices.extract",
+      metadata: {
+        productId: productId ?? "",
+        url,
+        path: "preloaded-html",
+      },
+    },
+  });
+
+  return parseExtractionJson(result.text);
+}
+
+/**
+ * Fallback: `generateText` with a `fetchPage` tool (`maxSteps > 1`).
  *
- * `generateText` (default `tool_choice` "auto") works with thinking models
- * that reject the required `tool_choice` `generateObject` would set (§1b), and
- * lets the model fetch the product page itself and return strict JSON, which we
- * validate with `priceExtractionSchema`.
+ * Works for non-thinking models. Thinking models (DeepSeek via Zen, etc.) can
+ * fail on the second step because `@ai-sdk/openai-compatible@0.2.x` drops
+ * `reasoning_content` when re-encoding assistant messages (§1e). Prefer
+ * `extractFromPageContent` whenever HTML is already available.
  */
 async function extractWithFetchTool(
   model: LanguageModel,
@@ -184,6 +251,7 @@ async function extractWithFetchTool(
       metadata: {
         productId: productId ?? "",
         url,
+        path: "fetch-tool",
       },
     },
   });
@@ -195,6 +263,12 @@ export interface AiExtractOptions {
   url: string;
   productId?: string;
   config: ResolvedAiConfig;
+  /**
+   * Pre-fetched product-page HTML from `fetchPage`. When provided, extraction
+   * uses a single no-tool `generateText` call (preferred). When omitted, the
+   * model is given a `fetchPage` tool and may multi-step.
+   */
+  html?: string;
 }
 
 /**
@@ -203,7 +277,7 @@ export interface AiExtractOptions {
  * the pipeline records a failed check instead of crashing.
  */
 export async function aiExtractPrice(options: AiExtractOptions): Promise<PriceExtraction | null> {
-  const { url, productId, config } = options;
+  const { url, productId, config, html } = options;
 
   const model = createModel(config);
   if (!model) {
@@ -215,12 +289,16 @@ export async function aiExtractPrice(options: AiExtractOptions): Promise<PriceEx
   }
 
   try {
+    if (html !== undefined) {
+      return await extractFromPageContent(model, url, html, productId);
+    }
     return await extractWithFetchTool(model, url, productId);
   } catch (error) {
     logger.error("AI price extraction failed", {
       model: config.model,
       productId,
       url,
+      path: html !== undefined ? "preloaded-html" : "fetch-tool",
       error: error instanceof Error ? error.message : String(error),
     });
     return null;

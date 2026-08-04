@@ -1,37 +1,52 @@
 import pLimit from "p-limit";
-import { logger } from "@iris/utils";
+import { getEnv, logger } from "@iris/utils";
+import { detectBlockedPage } from "./blocked-signatures";
 
 /**
- * Page fetching via a single real-browser transport (headless Chromium via
- * Playwright). Replaces the prior undici + wreq-js chain because some
- * retailers (e.g. thewarehouse.co.nz, pbtech.co.nz) sit behind Cloudflare's
- * Managed Security Challenge, which not only fingerprints HTTP/2 + TLS but
- * also serves a JavaScript challenge that requires execution to solve — a
- * real browser is the only universally-compatible transport.
+ * Page fetching via a single anti-detect-browser transport (Camoufox) hosted
+ * in a sidecar HTTP service. Replaces the prior in-process Playwright Chromium
+ * transport: several major NZ retailers sit behind hard anti-bot challenges
+ * (DataDome / Cloudflare managed / Akamai Bot Manager) that plain Chromium
+ * cannot pass, so `create` failed with the generic "Page fetch failed".
  *
- * The browser is launched once per process and reused across all `fetchPage`
- * calls; each call creates a fresh `context` (so cookies and storage do not
- * leak between retailers) and disposes it in a `finally`. Concurrency is
- * still bounded by the shared `p-limit` (performance.md — Shared Limiter
- * Pattern), and the retry / exponential-backoff / structured-logging
- * envelope is preserved exactly as before so operational behaviour does not
- * change.
+ * Camoufox is an engine-level anti-detect Firefox fork; the 2026-08-04 spike
+ * proved it passes all three challenge classes for free. It is now the SINGLE
+ * fetch transport — there is no Playwright/Chromium in the app anymore, and no
+ * dual-path orchestration. The sidecar is a required dependency in every
+ * environment (design.md §Config, AC5).
+ *
+ * This module is a thin HTTP client for the sidecar. It preserves the
+ * operational envelope of the prior transport: the shared `pLimit`
+ * (performance.md — Shared Limiter Pattern), the retry / exponential-backoff /
+ * jitter loop, and the structured logging. The sidecar holds ONE shared
+ * `AsyncCamoufox` browser and bounds concurrency with its own asyncio
+ * semaphore matching `FETCH_CONCURRENCY`.
+ *
+ * `fetchPage` returns a discriminated union so callers can distinguish a real
+ * page from a detected challenge/deny page (AC3) and from a transport failure
+ * (the generic "Page fetch failed").
  */
 
 const FETCH_CONCURRENCY = 5;
-const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
 const RETRY_JITTER_FACTOR = 0.5;
 
-const BROWSER_LAUNCH_TIMEOUT_MS = 60_000;
-
-export interface FetchPageResult {
-  html: string;
-  /** Final URL after redirects — useful context for the AI prompt. */
-  url: string;
-}
+/**
+ * Discriminated result of a page fetch (design.md §fetchPage return type).
+ *
+ * - `ok`: the page loaded and `detectBlockedPage` found no challenge marker.
+ * - `blocked`: the sidecar returned HTML, but it matches a known challenge /
+ *   deny signature — no real content. `signature` is the registry id (e.g.
+ *   `datadome-captcha`), surfaced in the failure reason.
+ * - `null`: the transport itself failed after retries (network error, sidecar
+ *   unreachable, non-JSON response). Callers map this to "Page fetch failed".
+ */
+export type FetchPageResult =
+  | { kind: "ok"; html: string; url: string }
+  | { kind: "blocked"; signature: string };
 
 export interface FetchPageOptions {
   /** Optional caller context for structured logging. */
@@ -54,92 +69,123 @@ function sleep(ms: number): Promise<void> {
 const pageFetchLimiter = pLimit(FETCH_CONCURRENCY);
 
 /**
- * Lazily-launched shared Chromium browser. We deliberately import
- * `playwright` at the top of the file (not dynamically) because the package
- * is now a hard dependency: the prior wreq-js + undici chain is gone, so
- * every fetch path uses this.
+ * Resolve the sidecar base URL. `CAMOUFOX_SIDECAR_URL` is required in env, so a
+ * missing value is a hard config error at first use (matching `DATABASE_URL`,
+ * AC5). Trailing slashes are stripped so `base + "/v1/fetch"` always works.
  */
-let browserPromise: Promise<import("playwright").Browser> | null = null;
+function getSidecarBaseUrl(): string {
+  const { CAMOUFOX_SIDECAR_URL } = getEnv();
+  return CAMOUFOX_SIDECAR_URL.replace(/\/+$/, "");
+}
 
-async function getBrowser(): Promise<import("playwright").Browser> {
-  if (browserPromise === null) {
-    browserPromise = (async () => {
-      const { chromium } = await import("playwright");
-      logger.info("Launching shared Playwright Chromium browser");
-      const browser = await chromium.launch({
-        headless: true,
-        timeout: BROWSER_LAUNCH_TIMEOUT_MS,
-      });
-      // Close on process exit so a dev / test process never leaves a zombie
-      // Chromium running. `beforeExit` only fires on graceful exit; the OS
-      // still reaps the process on signal.
-      const shutdown = () => {
-        void browser.close().catch(() => {
-          // Ignore — process is exiting.
-        });
-      };
-      process.once("beforeExit", shutdown);
-      return browser;
-    })();
-  }
-  return browserPromise;
+/** Body shape of a successful sidecar fetch response. */
+interface SidecarOkResponse {
+  ok: true;
+  html: string;
+  url: string;
+}
+
+/** Body shape of a sidecar fetch failure response (the sidecar never throws). */
+interface SidecarFailResponse {
+  ok: false;
+  reason: "blocked" | "fetch_failed";
 }
 
 /**
- * Perform a single Playwright fetch. Returns a discriminated result the retry
- * loop can branch on: a successful page, a non-2xx HTTP status, or an
- * out-of-band transport error (timeout, navigation failure, browser crash).
+ * Outcome of a single sidecar attempt. `error` covers any transport-level
+ * failure (network error, non-2xx status, non-JSON body, timeout) so the retry
+ * loop can back off and try again. The sidecar itself classifies anti-bot
+ * blocks as `{ ok: false, reason: "blocked" }`, but we still run
+ * `detectBlockedPage` on an `ok` HTML payload below to cover edge cases where
+ * the sidecar returns the challenge HTML verbatim (design.md §orchestration).
  */
 type FetchAttempt =
-  | { kind: "ok"; status: number; url: string; html: string }
-  | { kind: "status"; status: number; url: string }
+  | { kind: "ok"; html: string; url: string }
+  | { kind: "blocked"; reason: string }
   | { kind: "error"; message: string };
 
-async function attemptPlaywrightFetch(
-  url: string,
-  options: FetchPageOptions,
-): Promise<FetchAttempt> {
-  const browser = await getBrowser();
-  const context = await browser.newContext();
-  const page = await context.newPage();
+/**
+ * Perform a single sidecar fetch. POST `CAMOUFOX_SIDECAR_URL + /v1/fetch` with
+ * a 45 s timeout. Never throws: any failure (network error, non-JSON,
+ * non-2xx, timeout, schema mismatch) is mapped to `{ kind: "error" }` so the
+ * retry loop owns all backoff decisions.
+ */
+async function attemptSidecarFetch(url: string): Promise<FetchAttempt> {
+  const endpoint = `${getSidecarBaseUrl()}/v1/fetch`;
 
   try {
-    const response = await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: FETCH_TIMEOUT_MS,
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
-    if (!response) {
-      return { kind: "error", message: "navigation produced no response" };
+    if (!response.ok) {
+      return {
+        kind: "error",
+        message: `sidecar HTTP ${response.status} ${response.statusText}`,
+      };
     }
 
-    if (!response.ok()) {
-      return { kind: "status", status: response.status(), url: page.url() };
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { kind: "error", message: `sidecar non-JSON response: ${message}` };
     }
 
-    const html = await page.content();
-    return { kind: "ok", status: response.status(), url: page.url(), html };
+    // Validate the payload shape defensively — a misbehaving sidecar must not
+    // crash the pipeline.
+    if (
+      payload &&
+      typeof payload === "object" &&
+      (payload as { ok?: unknown }).ok === true
+    ) {
+      const ok = payload as SidecarOkResponse;
+      if (typeof ok.html === "string" && typeof ok.url === "string") {
+        return { kind: "ok", html: ok.html, url: ok.url };
+      }
+    }
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      (payload as { ok?: unknown }).ok === false
+    ) {
+      const fail = payload as SidecarFailResponse;
+      const reason = typeof fail.reason === "string" ? fail.reason : "unknown";
+      if (reason === "blocked") {
+        // The sidecar itself flagged an anti-bot block (it never throws).
+        // The signature registry is the source of truth for the canonical id,
+        // but the sidecar reports blocked without HTML, so we surface the
+        // sidecar's reason as the signature and let the caller map it to the
+        // specific anti-bot message.
+        return { kind: "blocked", reason };
+      }
+      // `fetch_failed` (or any other reason) is a transport-level failure —
+      // map to `error` so the retry loop owns backoff, and callers surface
+      // "Page fetch failed" rather than a misleading anti-bot message.
+      return { kind: "error", message: `sidecar fetch failed (${reason})` };
+    }
+
+    return { kind: "error", message: "sidecar returned an unexpected payload" };
   } catch (error) {
+    // Never throw: map network / timeout / abort errors so the retry loop
+    // owns backoff and structured logging (attempt number included there).
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn("Page fetch transport error", {
-      url,
-      error: message,
-      productId: options.productId,
-    });
     return { kind: "error", message };
-  } finally {
-    await page.close().catch(() => {
-      // Already closed or being torn down — ignore.
-    });
-    await context.close().catch(() => {
-      // Ignore.
-    });
   }
 }
 
 /**
- * Fetch a product page. Returns `null` when the fetch ultimately fails (status
- * or transport error after retries) so callers can treat it as a failed check.
+ * Fetch a product page via the Camoufox sidecar.
+ *
+ * Returns `null` when the transport ultimately fails after retries (so callers
+ * map it to "Page fetch failed"), or a `blocked` variant when a challenge/deny
+ * page was detected (AC3: a specific anti-bot reason, never "Page fetch
+ * failed").
  */
 export async function fetchPage(
   url: string,
@@ -147,22 +193,39 @@ export async function fetchPage(
 ): Promise<FetchPageResult | null> {
   return pageFetchLimiter(async () => {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const result = await attemptPlaywrightFetch(url, options);
+      const result = await attemptSidecarFetch(url);
 
       if (result.kind === "ok") {
-        return { html: result.html, url: result.url };
+        // Run the generic anti-bot signature check on the returned HTML so a
+        // challenge page the sidecar delivered verbatim is still caught
+        // (design.md §orchestration). A non-null signature short-circuits to
+        // the specific blocked reason; otherwise this is a real page.
+        const signature = detectBlockedPage(result.html);
+        if (signature) {
+          return { kind: "blocked", signature };
+        }
+        return { kind: "ok", html: result.html, url: result.url };
       }
 
-      if (result.kind === "status") {
-        logger.warn("Page fetch returned non-2xx status", {
+      if (result.kind === "blocked") {
+        // The sidecar itself flagged an anti-bot block (it never throws). The
+        // sidecar reports blocked without HTML, so use its reason as the
+        // signature — callers map it to the specific anti-bot message (AC3).
+        logger.warn("Page blocked by anti-bot challenge (sidecar)", {
           url,
-          status: result.status,
-          attempt,
+          reason: result.reason,
           productId: options.productId,
         });
-      } else {
-        // Already logged inside attemptPlaywrightFetch.
+        return { kind: "blocked", signature: result.reason };
       }
+
+      // result.kind === "error" — already logged inside attemptSidecarFetch.
+      logger.warn("Page fetch sidecar error", {
+        url,
+        error: result.message,
+        attempt,
+        productId: options.productId,
+      });
 
       if (attempt < MAX_RETRIES) {
         const delay = calculateBackoffDelay(attempt);
@@ -172,8 +235,7 @@ export async function fetchPage(
 
       logger.error("Page fetch failed after retries", {
         url,
-        status: result.kind === "status" ? result.status : undefined,
-        error: result.kind === "error" ? result.message : undefined,
+        error: result.message,
         productId: options.productId,
       });
       return null;

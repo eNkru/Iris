@@ -17,11 +17,11 @@ const nextConfig: NextConfig = {
   //
   // `serverExternalPackages` externalises all imports of these packages
   // (static and dynamic) so webpack leaves them as runtime `require()` /
-  // `import()` calls that Node resolves from `node_modules`. This is the
-  // correct mechanism for `await import("playwright")` in @iris/prices —
-  // a previous `IgnorePlugin`-based approach was wrong: returning `false`
-  // from `beforeResolve` makes webpack generate a stub that throws
-  // "Cannot find module" at runtime, rather than leaving the module external.
+  // `import()` calls that Node resolves from `node_modules`.
+  //
+  // Note: `playwright` / `playwright-core` were previously listed here for the
+  // old Chromium transport. They are removed — the fetch transport is now a
+  // thin HTTP client for the Camoufox sidecar (no browser deps in the app).
   serverExternalPackages: [
     "pg",
     "better-auth",
@@ -31,8 +31,6 @@ const nextConfig: NextConfig = {
     "ai",
     "@ai-sdk/openai-compatible",
     "p-limit",
-    "playwright",
-    "playwright-core",
   ],
   webpack: (
     config: {

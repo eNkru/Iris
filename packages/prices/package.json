@@ -21,10 +21,8 @@
     "@iris/database": "workspace:*",
     "@iris/utils": "workspace:*",
     "ai": "^4.0.0",
-    "chromium-bidi": "0.8.0",
     "drizzle-orm": "^0.44.0",
     "p-limit": "^6.0.0",
-    "playwright": "1.49.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {

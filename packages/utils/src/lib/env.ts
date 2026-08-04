@@ -40,6 +40,13 @@ export const envSchema = z.object({
   // Scheduler — in-process loop tick and distributed-lock TTL
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(30_000),
   SCHEDULER_LOCK_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+
+  // Camoufox sidecar — the single fetch transport (design.md §Config).
+  // The sidecar runs the anti-detect Firefox browser that fetches product
+  // pages behind hard anti-bot challenges (DataDome / Cloudflare / Akamai).
+  // It is a required dependency in every environment (dev and prod): a missing
+  // value is a hard config error at first use, matching `DATABASE_URL` (AC5).
+  CAMOUFOX_SIDECAR_URL: z.string().url("CAMOUFOX_SIDECAR_URL is required"),
 });
 
 export type Env = z.infer<typeof envSchema>;

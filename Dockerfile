@@ -8,23 +8,14 @@
 # (drizzle-kit for `db:migrate`, tsc) inside the image keeps the entrypoint
 # simple and is acceptable for a private NAS deployment.
 #
-# Playwright: the @iris/prices package's fetch-page.ts launches a real
-# headless Chromium to read retailers behind Cloudflare Managed Security
-# Challenges. The chromium binary is downloaded into the Playwright cache
-# during `playwright install --with-deps chromium`; `--with-deps` also
-# installs the runtime libraries (nss, freetype, etc.) via apt-get.
-# Debian Bookworm (glibc) is required because Playwright's chromium build
-# is linked against glibc — it cannot run on Alpine/musl.
+# Camoufox sidecar: the fetch transport (anti-detect Firefox) now runs in a
+# separate `camoufox` Compose service — the browser binary and its runtime
+# libraries live in the sidecar image, not here. This app image only needs
+# Node + wget (for the healthcheck), so it stays on Debian slim.
 FROM node:22-bookworm-slim
 
-# wget is needed by the docker-compose healthcheck. The rest of the chromium
-# runtime libraries are installed by `playwright install --with-deps` below.
+# wget is needed by the docker-compose healthcheck.
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
-
-# Playwright's chromium download lives in /ms-playwright by default. We let
-# Playwright download the matching build at image-build time so the cache
-# is layered into the image and the app can launch it offline.
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # pnpm version is pinned by the packageManager field in package.json; activate
 # it via corepack (bundled with Node 22).
@@ -46,12 +37,7 @@ COPY packages/prices/package.json packages/prices/package.json
 # unrs-resolver) for their postinstall scripts.
 RUN pnpm install --frozen-lockfile
 
-# 2. Download the Playwright Chromium build and its system-level runtime
-#    libraries. `--with-deps` runs apt-get to install nss, freetype, harfbuzz,
-#    fontconfig, etc. — the same set the alpine variant installed manually.
-RUN pnpm --filter @iris/prices exec playwright install --with-deps chromium
-
-# 3. Copy the rest of the source and build.
+# 2. Copy the rest of the source and build.
 COPY . .
 
 # DATABASE_URL is required at build time: @iris/database's client module reads
@@ -61,9 +47,16 @@ COPY . .
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
+# CAMOUFOX_SIDECAR_URL is also required by envSchema (AC5). getEnv() validates the
+# full schema on first call, so a missing value fails `next build` the same way
+# DATABASE_URL does. The build-time value is a placeholder — runtime Compose
+# overrides it with the real sidecar URL on the internal network.
+ARG CAMOUFOX_SIDECAR_URL=http://camoufox:8000
+ENV CAMOUFOX_SIDECAR_URL=${CAMOUFOX_SIDECAR_URL}
+
 RUN pnpm --filter @iris/web build
 
-# 4. Runtime
+# 3. Runtime
 ENV NODE_ENV=production
 EXPOSE 3000
 

@@ -1,12 +1,16 @@
 # Iris — self-hosted price tracking & alert app (design.md R14).
 #
-# Three services:
-#   app      — single Next.js container: web server + in-process scheduler
-#   postgres — app data + better-auth tables (schema applied on app start)
-#   redis    — session cache + scheduler distributed lock
+# Four services:
+#   app       — single Next.js container: web server + in-process scheduler
+#   camoufox  — anti-detect Firefox sidecar; the single fetch transport
+#   postgres  — app data + better-auth tables (schema applied on app start)
+#   redis     — session cache + scheduler distributed lock
 #
 # The app container runs `db:migrate` on every start (idempotent), so a fresh
-# deployment needs nothing more than `docker compose up --build -d`.
+# deployment needs nothing more than `docker compose up --build -d`. The
+# `camoufox` sidecar must be reachable for any product fetch (AC5): the app
+# reads `CAMOUFOX_SIDECAR_URL` and fails fast with a logged error if it is
+# down rather than silently misbehaving.
 
 services:
   postgres:
@@ -36,23 +40,59 @@ services:
       timeout: 3s
       retries: 12
 
+  # Camoufox sidecar — the single fetch transport (anti-detect Firefox).
+  # The app reaches it as http://camoufox:8000 on the Compose network. Port
+  # 8000 is also published for local `pnpm dev`
+  # (CAMOUFOX_SIDECAR_URL=http://localhost:8000). The service is reusable
+  # standalone (`docker compose up camoufox`) so the sidecar can run before
+  # `pnpm dev` starts the app.
+  camoufox:
+    build:
+      context: ./camoufox
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # python:3.12-slim has no wget by default; curl is also absent. Use a
+      # tiny Python one-liner so the healthcheck works without extra apt deps.
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   app:
     build:
       context: .
       args:
         # Required at build time by module-load env validation (@iris/database).
         DATABASE_URL: postgres://${POSTGRES_USER:-iris}:${POSTGRES_PASSWORD:-iris}@postgres:5432/${POSTGRES_DB:-iris}
+        # Required at build time by envSchema (AC5). Placeholder only — runtime
+        # env below points at the real sidecar on the Compose network.
+        CAMOUFOX_SIDECAR_URL: http://camoufox:8000
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Soft dependency: the app still boots if the sidecar is down, but fetches
+      # then fail loudly via logging (AC5). We do not block on `service_healthy`
+      # so a slow sidecar start does not prevent the app from serving.
+      camoufox:
+        condition: service_started
     environment:
       NODE_ENV: production
       APP_URL: ${APP_URL:-http://localhost:3000}
       DATABASE_URL: postgres://${POSTGRES_USER:-iris}:${POSTGRES_PASSWORD:-iris}@postgres:5432/${POSTGRES_DB:-iris}
       REDIS_URL: redis://redis:6379
+      # Camoufox sidecar URL (required, AC5). On the Compose internal network
+      # the `camoufox` service is reachable at http://camoufox:8000.
+      CAMOUFOX_SIDECAR_URL: http://camoufox:8000
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-change-me}
       SMTP_HOST: ${SMTP_HOST:-localhost}
       SMTP_PORT: ${SMTP_PORT:-587}
