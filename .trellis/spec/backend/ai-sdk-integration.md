@@ -97,11 +97,15 @@ whose **thinking mode** rejects the *required* `tool_choice` that
 Error from provider (DeepSeek): Thinking mode does not support this tool_choice
 ```
 
-**Fix (the path Iris uses everywhere)**: `generateText` with `tools`, whose
-default `tool_choice` is `"auto"` — accepted by thinking models. Have the model
-return strict JSON and validate it yourself with `priceExtractionSchema` (see
-§1d). Iris no longer has a `generateObject` branch — the fetch-tool path is the
-single extraction path.
+**Fix (still required for any tool-using call)**: `generateText` with `tools`,
+whose default `tool_choice` is `"auto"` — accepted by thinking models. Have the
+model return strict JSON and validate it yourself with `priceExtractionSchema`
+(see §1d). Iris no longer has a `generateObject` branch.
+
+**Preferred production path** (used by `checkPrice`): the Camoufox sidecar has
+already fetched the page. Pass that HTML into `aiExtractPrice` and run a
+**single** no-tool `generateText` over the reduced page content. That also
+avoids the multi-step `reasoning_content` failure in §1e.
 
 ## 1c. Gotcha: page truncation can hide the price
 
@@ -111,22 +115,28 @@ price markup, so the truncated prompt contains no price → the model correctly
 reports `available: false`. This is a pipeline/prompt characteristic, not an AI
 bug.
 
-Iris avoids this entirely: the model fetches the page itself via the
-`fetchPage` tool (§1d), which returns a compact reduction — visible text plus
-any embedded price JSON (React-Query/Next.js pages hydrate
+Iris avoids this by reducing the page first (`reducePageHtml`): visible text
+plus any embedded price JSON (React-Query/Next.js pages hydrate
 `{"formattedValue":"$119.00","value":119}` into `<script>` blobs). No raw HTML
-is put in the prompt.
+is put in the prompt. The reduction runs either on the preloaded HTML
+(`checkPrice` → `aiExtractPrice({ html })`) or inside the optional `fetchPage`
+tool fallback.
 
 ## 1d. Gotcha: a bare model call has NO web access
 
 A model called through `/chat/completions` (what `createOpenAICompatible`
 sends) cannot visit websites — it will honestly report *"I can't visit live
 websites"*. This is **not** a model limitation: the OpenCode TUI works because
-it wires up a `webfetch` tool. To give a model web access, pass it a fetch tool:
+it wires up a `webfetch` tool.
+
+Iris's primary path does **not** need the model to fetch: `checkPrice` already
+fetched via the Camoufox sidecar and passes `html` into `aiExtractPrice`. The
+`fetchPage` tool remains only as a fallback when no HTML is provided:
 
 ```typescript
 import { generateText, tool, jsonSchema } from "ai";
 
+// Fallback only — prefer preloaded HTML (see §1e).
 const result = await generateText({
   model,
   maxSteps: 5, // must exceed 1, or the final answer after the tool call is dropped
@@ -144,8 +154,33 @@ const result = await generateText({
 - Tool `parameters` must use the zod-v4-native `toJSONSchema` trick (1a).
 - Parse the strict JSON out of `result.text` and validate with
   `priceExtractionSchema.safeParse` yourself; `generateText` does not validate.
-- This is the **only** extraction path in Iris — see `aiExtractPrice` in
-  `packages/prices/src/pipeline/ai-extract.ts`.
+- Production checks use the preloaded-HTML path in `aiExtractPrice`
+  (`packages/prices/src/pipeline/ai-extract.ts`).
+
+## 1e. Gotcha: thinking models + multi-step tools drop `reasoning_content`
+
+DeepSeek thinking mode (e.g. `deepseek-v4-flash-free` via Zen) returns
+`reasoning_content` on every assistant turn. For multi-step tool use the API
+**requires** that field to be passed back on subsequent requests
+([Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)); omitting
+it yields:
+
+```
+Error from provider (…): The `reasoning_content` in the thinking mode must be
+passed back to the API.
+```
+
+`ai@4.x` multi-step `generateText` *does* keep reasoning parts on the internal
+message list, but `@ai-sdk/openai-compatible@0.2.x`'s
+`convertToOpenAICompatibleChatMessages` only re-encodes `text` + `tool-call`
+parts — it drops `type: "reasoning"`. So step 2 of a tool loop fails against
+DeepSeek.
+
+**Fix used by Iris**: do not multi-step for price extraction. `checkPrice`
+fetches once via Camoufox, then calls `aiExtractPrice({ html })` which runs a
+single no-tool `generateText` over `reducePageHtml(html)`. The tool-based path
+remains only as a fallback when HTML is not preloaded (and will still fail on
+thinking models until the provider package re-encodes reasoning).
 
 ## 2. Provider construction
 
@@ -168,7 +203,20 @@ function createModel(config: ResolvedAiConfig): LanguageModel | null {
 
 ## 3. Basic Usage
 
-### generateText (with a fetch tool — the Iris extraction path)
+### generateText (preloaded HTML — preferred Iris extraction path)
+
+```typescript
+import { generateText } from "ai";
+
+// html already fetched by fetchPage / Camoufox sidecar
+const result = await generateText({
+  model,
+  prompt: buildPageContentExtractionPrompt(url, reducePageHtml(html)),
+});
+// parse + priceExtractionSchema.safeParse(result.text)
+```
+
+### generateText (fetch-tool fallback — avoid with thinking models, §1e)
 
 ```typescript
 import { generateText, tool, jsonSchema } from "ai";

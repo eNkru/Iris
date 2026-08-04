@@ -454,104 +454,99 @@ async function batchProcessWithProgress(
 
 ## Page Fetch Transport for Bot-Protected Pages
 
-Some retailers (e.g. Cloudflare-proxied shops like `pbtech.co.nz`,
-`thewarehouse.co.nz`) sit behind a Managed Security Challenge that not only
-fingerprints the HTTP/2 + TLS client but also serves a JavaScript challenge
-(`_cf_chl_opt`, `cType: 'managed'`) that must be executed to solve. Node's
-native `fetch` (undici) is flagged → `403`/`503`, and the page is never
-delivered; the price-extraction pipeline then fails on "Page fetch failed" and
-the create flow rolls the product row back.
+Several major NZ retailers sit behind hard anti-bot challenges that a plain
+HTTP client cannot pass: DataDome (kogan.com), Cloudflare managed challenge
+(noelleeming.co.nz), and Akamai Bot Manager (farmers.co.nz). The price-
+extraction pipeline fetches the product page first, so a blocked fetch surfaces
+as the generic "Page fetch failed" and the create flow rolls the product row
+back — the user cannot add these retailers at all.
 
-A TLS-impersonation fallback (the prior `wreq-js` with a `chrome_*` profile) is
-**not robust enough**: Cloudflare scores an entire browser family (all
-`chrome_*` versions) as a single class, so sites like thewarehouse reject every
-Chrome-family profile while accepting Firefox/Safari. Profile rotation adds
-complexity and still has a blind spot the next time Cloudflare adjusts its
-scoring. The only universally-compatible transport is a **real headless
-browser that executes the challenge JavaScript** — at least for JS-challenge
-anti-bot systems.
+### Strategy: Camoufox is the single fetch transport
 
-It is **not** universal, though: **Akamai Bot Manager** serves a hard deny page
-that headless Chromium cannot pass. Confirmed live for `farmers.co.nz`
-(2026-08-04): plain headless Chromium returns HTTP 200 with ~5 KB of HTML whose
-`<head>` includes `<link href="/WAF_Deny_Page/failover_files/style.css">`, a
-title of just "Farmers", and no price tokens or price script blobs. The real
-product page is never delivered, so without the detection layer below the block
-masks itself as a genuine "unavailable" (the AI reads no price → `available:
-false` → product creation rolls back with the generic unavailable text).
+Camoufox is an engine-level anti-detect Firefox fork (the Byparr engine); its
+fingerprinting happens at the C++ engine level, not via JS patches. The
+2026-08-04 spike proved a headless Camoufox pass every previously-blocked site
+for free:
 
-### Pattern: single Playwright headless Chromium transport
+| Site | Plain Playwright | Camoufox (headless, free) |
+|------|------------------|---------------------------|
+| kogan.com (DataDome) | 403 / "Captcha Challenge" shell | 200 real PDP, price $199.98 |
+| noelleeming.co.nz (Cloudflare) | 403 "Just a moment…" | 200 real PDP, price $917.00 |
+| farmers.co.nz (Akamai) | /WAF_Deny_Page/ or Access Denied | 200 real PDP, $24.99 |
 
-`fetchPage` uses one transport — Playwright `chromium` — for every fetch. There
-is no undici primary path and no per-retailer branch. The browser is launched
-**once per process** and shared across all `fetchPage` calls; each call creates
-a fresh `context` + `page` (so cookies / storage do not leak between retailers)
-and disposes them in a `finally`. The shared `pLimit` and the retry /
-exponential-backoff / structured-logging envelope are preserved unchanged.
+Strategy decision (user, 2026-08-04): **Camoufox is the only fetch transport.**
+Playwright/Chromium is removed from the app entirely; there is no dual-path
+orchestration. The browser runs in a separate sidecar container so the app
+image stays small and browser crashes are isolated. The sidecar is a required
+dependency in every environment (dev and prod): the app reads
+`CAMOUFOX_SIDECAR_URL` (required in `env.ts`) and fails fast with a logged
+error if the sidecar is unreachable (AC5).
+
+Prior approaches evaluated and superseded:
+- Plain Playwright Chromium (the old transport): fails Akamai product paths
+  outright, and cannot pass DataDome/Cloudflare on the sites above.
+- `playwright-extra` + `puppeteer-extra-plugin-stealth` (two rounds, 2026-08-04):
+  free/local JS stealth changes the Akamai response (instant deny → behavioral
+  challenge) but never delivers a real Farmers product page. Removed.
+- TLS-impersonation (`wreq-js` chrome profile): Cloudflare scores a whole
+  browser family as one class; profile rotation has a blind spot.
+- Paid scraping API / residential proxy: was the documented next escalation
+  after the stealth verdict, but Camoufox covers all three challenge classes
+  for free, so no paid service is needed.
+
+### Pattern: sidecar HTTP client with the shared limiter
+
+`fetchPage` is a thin HTTP client for the sidecar. It no longer imports
+Playwright or launches a browser. The operational envelope is preserved
+exactly: the shared `pLimit(5)` (Shared Limiter Pattern), retry /
+exponential-backoff / jitter (`MAX_RETRIES = 3`), and structured logging. The
+sidecar holds ONE shared `AsyncCamoufox` browser and bounds its own concurrency
+with an asyncio semaphore matching `FETCH_CONCURRENCY = 5`.
 
 ```typescript
 // packages/prices/src/pipeline/fetch-page.ts (abridged)
-let browserPromise: Promise<import("playwright").Browser> | null = null;
+export type FetchPageResult =
+  | { kind: "ok"; html: string; url: string }
+  | { kind: "blocked"; signature: string };
 
-async function getBrowser(): Promise<import("playwright").Browser> {
-  if (browserPromise === null) {
-    browserPromise = (async () => {
-      const { chromium } = await import("playwright");
-      const browser = await chromium.launch({ headless: true, timeout: 60_000 });
-      process.once("beforeExit", () => void browser.close().catch(() => {}));
-      return browser;
-    })();
-  }
-  return browserPromise;
-}
-
-async function attemptPlaywrightFetch(url: string, opts: FetchPageOptions) {
-  const browser = await getBrowser();
-  const context = await browser.newContext();   // fresh per call
-  const page = await context.newPage();
-  try {
-    const response = await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: FETCH_TIMEOUT_MS,
-    });
-    if (!response?.ok()) return { kind: "status", status: response?.status() ?? 0 };
-    return { kind: "ok", html: await page.content(), url: page.url() };
-  } finally {
-    await page.close().catch(() => {});
-    await context.close().catch(() => {});
-  }
+async function attemptSidecarFetch(url: string, opts: FetchPageOptions) {
+  const response = await fetch(`${getSidecarBaseUrl()}/v1/fetch`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), // 45 s
+  });
+  // map JSON {ok:true,html,url} | {ok:false,reason} | non-JSON/network → ok/blocked/error
 }
 
 export async function fetchPage(url: string, opts: FetchPageOptions) {
   return pageFetchLimiter(async () => {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const result = await attemptPlaywrightFetch(url, opts);
-      if (result.kind === "ok") return { html: result.html, url: result.url };
-      // ... normal backoff / retry / null on total failure
+      const result = await attemptSidecarFetch(url, opts);
+      if (result.kind === "ok") {
+        const signature = detectBlockedPage(result.html); // double-check returned HTML
+        if (signature) return { kind: "blocked", signature };
+        return { kind: "ok", html: result.html, url: result.url };
+      }
+      if (result.kind === "blocked") return { kind: "blocked", signature: result.reason };
+      // error → backoff and retry; null on total failure
     }
     return null;
   });
 }
 ```
 
-### Choice of browser library
+### Anti-bot challenge/deny detection (shipped)
 
-`playwright` (Microsoft, MIT) is the chosen library: first-party, supports
-Node 22, the `chromium` channel is the most predictable across glibc / musl
-deployments, and the API surface is tiny (`newContext` + `newPage` + `goto`
-+ `content` + `close`). `playwright-core` + `@playwright/browser-chromium` is
-the equivalent split; this repo just depends on `playwright` directly.
-
-Rejected alternatives: pure TLS-profile rotation (insufficient — one browser
-family is a single scoring class), Puppeteer (less predictable across
-deployments), CAPTCHA-solving service (cost, third-party dependency, ToS risk).
-
-### Anti-bot WAF-deny detection (shipped)
-
-Because headless Chromium is not universal (see Akamai above), `checkPrice`
-runs a **generic anti-bot signature check** on every fetched page before the AI
-is called. A match short-circuits to a clear failure reason instead of wasting
-a model call on a page with no price and masking the block as "unavailable".
+Because Camoufox is still a single transport (a regression on a site would have
+no second path), `fetchPage` runs a **generic anti-bot signature check** on
+every returned HTML before returning `ok`. A match short-circuits to the
+`blocked` variant so `checkPrice` surfaces a specific anti-bot reason instead
+of the generic "Page fetch failed" (AC3). The registry covers all challenge
+classes confirmed live 2026-08-04. Real PDPs that only embed a Cloudflare
+Turnstile widget (e.g. pbtech) contain `challenges.cloudflare.com/turnstile`
+but are **not** challenge shells — the signature must not treat bare
+`challenges.cloudflare.com` on large pages as a block (false positive fixed
+2026-08-04).
 
 ```typescript
 // packages/prices/src/pipeline/blocked-signatures.ts
@@ -562,117 +557,86 @@ const BLOCKED_SIGNATURES = [
   // intermediate behavioral challenge page (not a real PDP)
   { id: "akamai-behavioral-challenge", test: (html) =>
       html.includes("sec-if-cpt-container") && html.length < 20_000 },
-  // { id: "cloudflare-challenge", test: (html) => html.includes("cf-chl-bypass") },
+  // DataDome captcha (kogan when the challenge is not solved)
+  { id: "datadome-captcha", test: (html) => html.includes("captcha-delivery.com") },
+  // Cloudflare managed-challenge shell only — NOT bare Turnstile embeds on
+  // real PDPs (pbtech loads challenges.cloudflare.com/turnstile on a full page).
+  { id: "cloudflare-challenge", test: (html) =>
+      html.includes("_cf_chl_opt") || html.includes("cf-chl")
+      || (html.length < 5_000 && (
+           /just a moment/i.test(title)
+           || html.includes("challenges.cloudflare.com")
+         )) },
 ];
 export function detectBlockedPage(html: string): string | null { ... }
 ```
 
 ```typescript
-// packages/prices/src/pipeline/check-price.ts — after fetchPage + null guard
-const blocked = detectBlockedPage(page.html);
-if (blocked) {
-  logger.warn("Page blocked by anti-bot WAF", { productId, url, signature: blocked });
-  return { status: "failed", reason: `Anti-bot WAF deny page (${blocked}) — retailer blocks automated access.` };
+// packages/prices/src/pipeline/check-price.ts — after fetchPage
+const page = await fetchPage(product.url, { productId });
+if (!page) return { status: "failed", reason: "Page fetch failed" };       // transport
+if (page.kind === "blocked") {
+  logger.warn("Page blocked by anti-bot WAF", { productId, url, signature: page.signature });
+  return { status: "failed", reason: `Anti-bot WAF deny page (${page.signature}) — …` };
 }
+// page.kind === "ok" → aiExtractPrice({ url: page.url, html: page.html, ... })
+// Preloaded HTML: single generateText, no multi-step tool loop (ai-sdk §1e).
 ```
 
 The registry is intentionally generic (id + predicate), not per-retailer code,
-and the Cloudflare entry stays commented out because Cloudflare-proxied shops
-currently pass via the JS challenge. The create flow already surfaces
-`check.reason`, so an operator sees "Anti-bot WAF deny page (akamai-waf) — …"
-instead of the generic "unavailable" text. Detection stays even if stealth is
-later wired in: stealth may not defeat every anti-bot system, and a clear
-failure beats a silent "unavailable".
-
-### Stealth evasion (evaluated twice, deferred — not shipped)
-
-Attempts to defeat Akamai with free/local browser-fingerprint stealth were
-evaluated (2026-08-04, two rounds) and **deferred**: nothing delivers a real
-Farmers **product** page to automation.
-
-**Round 1** — `playwright-extra@4.3.6` + `puppeteer-extra-plugin-stealth@2.11.2`
-+ `--disable-blink-features=AutomationControlled`. Stealth *changes* the
-Akamai response: instant `/WAF_Deny_Page/` becomes a behavioral JS challenge
-(`sec-if-cpt-container`). After ~15 s the challenge detects automation and
-serves the same deny page; the progress button never enables. Manual
-`addInitScript` evasions alone were worse (immediate deny).
-
-**Round 2** (retry beyond round 1) — still fail on the product URL:
-
-- Realistic NZ context (UA, viewport, `en-NZ`, `Pacific/Auckland`), long waits
-  (40–60 s), `networkidle`, mouse movement during the challenge.
-- System Chrome via Playwright `channel: "chrome"`, headed (non-headless)
-  Chrome, Playwright Firefox, mobile iPhone UA, persistent user-data dir.
-- Homepage warm-up then product / category / search / in-page clicks /
-  same-origin `fetch` of the PDP (cookies present).
-- Intershop-style product endpoints under
-  `/INTERSHOP/web/WFS/Farmers-Shop-Site/...` (the shop stack behind the
-  marketing site).
-
-Important split: the **homepage soft-passes** under stealth/Chrome (~400 KB+
-real HTML with price tokens on cards), and bare undici also gets a real home
-document — so the client IP is **not** a total ban. **Product, category,
-search, and shop AJAX paths are hard-blocked** (post-challenge
-`/WAF_Deny_Page/` or edge `Access Denied` HTML). Warm cookies and in-site
-navigation do not lift that path policy. Free third-party readers (e.g. jina)
-do not help (themselves challenged).
-
-Verdict and posture:
-
-- Stealth is **not wired** into `fetch-page.ts` (the transport remains plain
-  Playwright). The evaluated stealth packages (`playwright-extra`,
-  `puppeteer-extra-plugin-stealth`) were **removed** from `@iris/prices` —
-  detection-only ships; unused deps must not stay pinned. They were never
-  added to `@iris/web` / `serverExternalPackages`.
-- Detection covers all three Akamai shapes seen live: `akamai-waf`
-  (`/WAF_Deny_Page/`), `akamai-access-denied` (title Access Denied + small
-  HTML), `akamai-behavioral-challenge` (`sec-if-cpt-container` intermediate).
-- If a future approach passes Akamai on product URLs, wire it **globally** in
-  `fetch-page.ts` only (no per-retailer branch), re-add any required deps then,
-  and keep shared browser, fresh-context-per-call, retry/backoff, `pLimit`.
-  Dual-package + `serverExternalPackages` wiring would apply only if a new
-  package is introduced (same pattern as `playwright`).
-- Documented next escalation: **residential/mobile proxy** (or equivalent
-  trusted egress). Fingerprint stealth alone is insufficient against this
-  path policy. Proxy remains user-deferred. Full probe table:
-  `.trellis/tasks/08-04-anti-bot-waf-bypass/verdict.md`.
+and the detection runs on every fetch (no hostname branching). The create flow
+surfaces `check.reason`, so an operator sees "Anti-bot WAF deny page
+(datadome-captcha) — …" instead of the generic text. Detection stays even
+though Camoufox passes today: a clear failure beats a silent "unavailable",
+and a regression on any site is visible, not silent.
 
 ### Required wiring
 
-- `playwright` is a direct dependency of both `@iris/prices` (the package that
-  imports it) and `@iris/web` (so pnpm symlinks it into `apps/web/node_modules/`
-  for the Next.js server bundle to resolve at runtime). Pin the same exact
-  version in both `package.json` files (e.g. `1.49.1`) — a mismatch causes
-  two browser binaries to be downloaded.
-- Add `playwright` and `playwright-core` to `apps/web/next.config.ts`
-  `serverExternalPackages` so webpack leaves the dynamic `import("playwright")`
-  as a runtime `require()` / `import()` that Node resolves from `node_modules`.
-  **Do NOT use an `IgnorePlugin` / `beforeResolve` returning `false`** — that
-  makes webpack emit a stub that throws `"Cannot find module"` at runtime
-  instead of leaving the module external.
-- `apps/web/tsconfig.json` excludes `next.config.ts` from the app's
-  `tsc --noEmit`; Next compiles the file itself with webpack in scope.
+- `CAMOUFOX_SIDECAR_URL` is a required field in `packages/utils/src/lib/env.ts`
+  (`z.string().url()`), matching `DATABASE_URL`'s hard-error behavior (AC5).
+- `.env.example` documents it as required and notes local dev needs the
+  sidecar (`docker compose up camoufox`).
+- `fetch-page.ts` imports `getEnv` (from `@iris/utils`) to read the base URL;
+  no Playwright import remains. `playwright` / `playwright-core` /
+  `chromium-bidi` are removed from `@iris/prices` and `@iris/web` package.json,
+  and from `apps/web/next.config.ts` `serverExternalPackages`.
+- The app `Dockerfile` no longer runs `playwright install --with-deps`; browser
+  deps live in the sidecar image (`camoufox/Dockerfile`).
 - Keep the shared `pLimit` and structured logging wrapping the transport so
   observability is consistent across all fetches.
 
-### Docker image (glibc, not musl)
+### Docker / sidecar deployment
 
-Playwright's chromium build is linked against **glibc** and cannot run on
-Alpine/musl. The `Dockerfile` uses `node:22-bookworm-slim` (Debian) and runs
-`pnpm --filter @iris/prices exec playwright install --with-deps chromium` at
-image-build time. `--with-deps` runs `apt-get` to install the runtime libraries
-(nss, freetype, harfbuzz, fontconfig, etc.) and downloads the matching
-chromium binary into `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so the app can
-launch it offline at runtime.
+The sidecar is a separate Compose service (`camoufox/`):
+
+- `camoufox/Dockerfile`: `python:3.12-slim`, pip install `camoufox fastapi
+  uvicorn`, `camoufox fetch` at build (browser cached into the image, offline
+  at runtime), `CMD uvicorn`. Camoufox ships `linux/arm64` builds, so ARM NAS
+  deployments work.
+- `camoufox/server.py`: FastAPI app; lazy single `AsyncCamoufox` (headless)
+  launched in the lifespan; asyncio semaphore (5); `POST /v1/fetch`; `GET
+  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); `content()`
+  + `page.url()`; stdlib logging; never throws to the caller.
+- `docker-compose.yml`: `camoufox` service (internal network only,
+  `restart: unless-stopped`); app `depends_on: camoufox` (soft — `service_started`,
+  so a slow sidecar start does not block the app from serving) and gets
+  `CAMOUFOX_SIDECAR_URL=http://camoufox:8000`.
+
+### Local dev
+
+`pnpm dev` requires the sidecar. Run `docker compose up camoufox` (or a local
+venv running `uvicorn server:app`) before starting the app. The README and
+`.env.example` note this. With the sidecar on `http://localhost:8000`, local
+dev and the in-container URL both work.
 
 ### Anti-pattern: retailer-specific code
 
 Do NOT add a per-retailer branch like "if the URL contains pbtech.co.nz, use
-transport X". The single Playwright transport handles every retailer the same
-way; any future Cloudflare-proxied site benefits automatically. There is no
+transport X". The single Camoufox transport handles every retailer the same
+way; any future anti-bot-protected site benefits automatically. There is no
 URL allowlist and no per-hostname code path. The same rule applies to anti-bot
-layers: WAF-deny detection (and any future evasion, if reintroduced) is applied
-**globally** to every fetch, never keyed off a hostname.
+layers: WAF-deny detection is applied **globally** to every fetch, never keyed
+off a hostname.
 
 ## Memory Optimization
 

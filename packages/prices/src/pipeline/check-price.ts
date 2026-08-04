@@ -6,7 +6,6 @@ import { logger } from "@iris/utils";
 import { dispatchPriceAlert } from "../notifications/dispatch";
 import { roundToCent, shouldAlert } from "./alert-rules";
 import { resolveAiConfig, aiExtractPrice } from "./ai-extract";
-import { detectBlockedPage } from "./blocked-signatures";
 import { fetchPage } from "./fetch-page";
 import type { CheckPriceResult } from "./types";
 
@@ -41,32 +40,38 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
   // --- Network / AI (outside any DB transaction) ---
   const page = await fetchPage(product.url, { productId });
   if (!page) {
+    // `null` = transport failed after retries (sidecar down, network error,
+    // non-JSON). This is the generic transport failure, not an anti-bot block.
     await touchLastCheckedAt(productId, now);
     return { status: "failed", reason: "Page fetch failed" };
   }
 
-  // Anti-bot WAF deny page (e.g. Akamai `/WAF_Deny_Page/`): short-circuit
-  // before the AI call — the page carries no price, so extraction would waste
-  // a model call and mask the block as "unavailable". Surfacing the clear
-  // reason lets the operator distinguish anti-bot from genuine stock-out.
-  const blocked = detectBlockedPage(page.html);
-  if (blocked) {
+  // Anti-bot challenge / deny page (e.g. Akamai `/WAF_Deny_Page/`, DataDome
+  // captcha, Cloudflare "Just a moment…"): short-circuit before the AI call —
+  // the page carries no price, so extraction would waste a model call and mask
+  // the block as "unavailable". Surfacing the clear reason lets the operator
+  // distinguish anti-bot from genuine stock-out (AC3).
+  if (page.kind === "blocked") {
     await touchLastCheckedAt(productId, now);
     logger.warn("Page blocked by anti-bot WAF", {
       productId,
       url: product.url,
-      signature: blocked,
+      signature: page.signature,
     });
     return {
       status: "failed",
-      reason: `Anti-bot WAF deny page (${blocked}) — retailer blocks automated access.`,
+      reason: `Anti-bot WAF deny page (${page.signature}) — retailer blocks automated access.`,
     };
   }
 
   const settings = await getGlobalSettings();
   const config = resolveAiConfig(settings);
+  // Pass the already-fetched HTML so extraction is a single generateText call
+  // (no multi-step tool loop). That avoids a DeepSeek thinking-mode failure
+  // where step 2 drops `reasoning_content` (ai-sdk-integration.md §1e) and
+  // skips a redundant second Camoufox fetch of the same URL.
   const extraction = config
-    ? await aiExtractPrice({ url: page.url, productId, config })
+    ? await aiExtractPrice({ url: page.url, productId, config, html: page.html })
     : null;
 
   if (!extraction) {
