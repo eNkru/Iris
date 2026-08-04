@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-08-03
+- **Total Sessions**: 3
+- **Last Active**: 2026-08-04
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~74 | Active |
+| `journal-1.md` | ~107 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-08-04 | Anti-bot WAF detection (Farmers / Akamai) | `bb15ab2` | `feat/anti-bot-waf-detection` |
 | 2 | 2026-08-03 | Fix Playwright deployment: module resolution + glibc Docker base | `dc79974`, `2dd1c05` | `feat/playwright-page-fetch` |
 | 1 | 2026-08-01 | Implement price tracker full-stack app | `15b94e6` | `main` |
 <!-- @@@/auto:session-history -->
