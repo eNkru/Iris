@@ -468,7 +468,17 @@ A TLS-impersonation fallback (the prior `wreq-js` with a `chrome_*` profile) is
 Chrome-family profile while accepting Firefox/Safari. Profile rotation adds
 complexity and still has a blind spot the next time Cloudflare adjusts its
 scoring. The only universally-compatible transport is a **real headless
-browser that executes the challenge JavaScript**.
+browser that executes the challenge JavaScript** — at least for JS-challenge
+anti-bot systems.
+
+It is **not** universal, though: **Akamai Bot Manager** serves a hard deny page
+that headless Chromium cannot pass. Confirmed live for `farmers.co.nz`
+(2026-08-04): plain headless Chromium returns HTTP 200 with ~5 KB of HTML whose
+`<head>` includes `<link href="/WAF_Deny_Page/failover_files/style.css">`, a
+title of just "Farmers", and no price tokens or price script blobs. The real
+product page is never delivered, so without the detection layer below the block
+masks itself as a genuine "unavailable" (the AI reads no price → `available:
+false` → product creation rolls back with the generic unavailable text).
 
 ### Pattern: single Playwright headless Chromium transport
 
@@ -536,6 +546,97 @@ Rejected alternatives: pure TLS-profile rotation (insufficient — one browser
 family is a single scoring class), Puppeteer (less predictable across
 deployments), CAPTCHA-solving service (cost, third-party dependency, ToS risk).
 
+### Anti-bot WAF-deny detection (shipped)
+
+Because headless Chromium is not universal (see Akamai above), `checkPrice`
+runs a **generic anti-bot signature check** on every fetched page before the AI
+is called. A match short-circuits to a clear failure reason instead of wasting
+a model call on a page with no price and masking the block as "unavailable".
+
+```typescript
+// packages/prices/src/pipeline/blocked-signatures.ts
+const BLOCKED_SIGNATURES = [
+  { id: "akamai-waf", test: (html) => html.includes("/WAF_Deny_Page/") },
+  // title "Access Denied" + small HTML (edge block after soft home pass)
+  { id: "akamai-access-denied", test: (html) => /* title + len < 5e3 */ },
+  // intermediate behavioral challenge page (not a real PDP)
+  { id: "akamai-behavioral-challenge", test: (html) =>
+      html.includes("sec-if-cpt-container") && html.length < 20_000 },
+  // { id: "cloudflare-challenge", test: (html) => html.includes("cf-chl-bypass") },
+];
+export function detectBlockedPage(html: string): string | null { ... }
+```
+
+```typescript
+// packages/prices/src/pipeline/check-price.ts — after fetchPage + null guard
+const blocked = detectBlockedPage(page.html);
+if (blocked) {
+  logger.warn("Page blocked by anti-bot WAF", { productId, url, signature: blocked });
+  return { status: "failed", reason: `Anti-bot WAF deny page (${blocked}) — retailer blocks automated access.` };
+}
+```
+
+The registry is intentionally generic (id + predicate), not per-retailer code,
+and the Cloudflare entry stays commented out because Cloudflare-proxied shops
+currently pass via the JS challenge. The create flow already surfaces
+`check.reason`, so an operator sees "Anti-bot WAF deny page (akamai-waf) — …"
+instead of the generic "unavailable" text. Detection stays even if stealth is
+later wired in: stealth may not defeat every anti-bot system, and a clear
+failure beats a silent "unavailable".
+
+### Stealth evasion (evaluated twice, deferred — not shipped)
+
+Attempts to defeat Akamai with free/local browser-fingerprint stealth were
+evaluated (2026-08-04, two rounds) and **deferred**: nothing delivers a real
+Farmers **product** page to automation.
+
+**Round 1** — `playwright-extra@4.3.6` + `puppeteer-extra-plugin-stealth@2.11.2`
++ `--disable-blink-features=AutomationControlled`. Stealth *changes* the
+Akamai response: instant `/WAF_Deny_Page/` becomes a behavioral JS challenge
+(`sec-if-cpt-container`). After ~15 s the challenge detects automation and
+serves the same deny page; the progress button never enables. Manual
+`addInitScript` evasions alone were worse (immediate deny).
+
+**Round 2** (retry beyond round 1) — still fail on the product URL:
+
+- Realistic NZ context (UA, viewport, `en-NZ`, `Pacific/Auckland`), long waits
+  (40–60 s), `networkidle`, mouse movement during the challenge.
+- System Chrome via Playwright `channel: "chrome"`, headed (non-headless)
+  Chrome, Playwright Firefox, mobile iPhone UA, persistent user-data dir.
+- Homepage warm-up then product / category / search / in-page clicks /
+  same-origin `fetch` of the PDP (cookies present).
+- Intershop-style product endpoints under
+  `/INTERSHOP/web/WFS/Farmers-Shop-Site/...` (the shop stack behind the
+  marketing site).
+
+Important split: the **homepage soft-passes** under stealth/Chrome (~400 KB+
+real HTML with price tokens on cards), and bare undici also gets a real home
+document — so the client IP is **not** a total ban. **Product, category,
+search, and shop AJAX paths are hard-blocked** (post-challenge
+`/WAF_Deny_Page/` or edge `Access Denied` HTML). Warm cookies and in-site
+navigation do not lift that path policy. Free third-party readers (e.g. jina)
+do not help (themselves challenged).
+
+Verdict and posture:
+
+- Stealth is **not wired** into `fetch-page.ts` (the transport remains plain
+  Playwright). The evaluated stealth packages (`playwright-extra`,
+  `puppeteer-extra-plugin-stealth`) were **removed** from `@iris/prices` —
+  detection-only ships; unused deps must not stay pinned. They were never
+  added to `@iris/web` / `serverExternalPackages`.
+- Detection covers all three Akamai shapes seen live: `akamai-waf`
+  (`/WAF_Deny_Page/`), `akamai-access-denied` (title Access Denied + small
+  HTML), `akamai-behavioral-challenge` (`sec-if-cpt-container` intermediate).
+- If a future approach passes Akamai on product URLs, wire it **globally** in
+  `fetch-page.ts` only (no per-retailer branch), re-add any required deps then,
+  and keep shared browser, fresh-context-per-call, retry/backoff, `pLimit`.
+  Dual-package + `serverExternalPackages` wiring would apply only if a new
+  package is introduced (same pattern as `playwright`).
+- Documented next escalation: **residential/mobile proxy** (or equivalent
+  trusted egress). Fingerprint stealth alone is insufficient against this
+  path policy. Proxy remains user-deferred. Full probe table:
+  `.trellis/tasks/08-04-anti-bot-waf-bypass/verdict.md`.
+
 ### Required wiring
 
 - `playwright` is a direct dependency of both `@iris/prices` (the package that
@@ -569,7 +670,9 @@ launch it offline at runtime.
 Do NOT add a per-retailer branch like "if the URL contains pbtech.co.nz, use
 transport X". The single Playwright transport handles every retailer the same
 way; any future Cloudflare-proxied site benefits automatically. There is no
-URL allowlist and no per-hostname code path.
+URL allowlist and no per-hostname code path. The same rule applies to anti-bot
+layers: WAF-deny detection (and any future evasion, if reintroduced) is applied
+**globally** to every fetch, never keyed off a hostname.
 
 ## Memory Optimization
 

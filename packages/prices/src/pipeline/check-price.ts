@@ -6,6 +6,7 @@ import { logger } from "@iris/utils";
 import { dispatchPriceAlert } from "../notifications/dispatch";
 import { roundToCent, shouldAlert } from "./alert-rules";
 import { resolveAiConfig, aiExtractPrice } from "./ai-extract";
+import { detectBlockedPage } from "./blocked-signatures";
 import { fetchPage } from "./fetch-page";
 import type { CheckPriceResult } from "./types";
 
@@ -42,6 +43,24 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
   if (!page) {
     await touchLastCheckedAt(productId, now);
     return { status: "failed", reason: "Page fetch failed" };
+  }
+
+  // Anti-bot WAF deny page (e.g. Akamai `/WAF_Deny_Page/`): short-circuit
+  // before the AI call — the page carries no price, so extraction would waste
+  // a model call and mask the block as "unavailable". Surfacing the clear
+  // reason lets the operator distinguish anti-bot from genuine stock-out.
+  const blocked = detectBlockedPage(page.html);
+  if (blocked) {
+    await touchLastCheckedAt(productId, now);
+    logger.warn("Page blocked by anti-bot WAF", {
+      productId,
+      url: product.url,
+      signature: blocked,
+    });
+    return {
+      status: "failed",
+      reason: `Anti-bot WAF deny page (${blocked}) — retailer blocks automated access.`,
+    };
   }
 
   const settings = await getGlobalSettings();
