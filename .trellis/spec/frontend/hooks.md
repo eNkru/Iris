@@ -310,6 +310,33 @@ export function useUserOrders(userId: string) {
 }
 ```
 
+## Per-Row Pending State (List Mutations)
+
+When a list renders per-row actions (e.g. "Check now", "Pause/Resume") that each call a mutation, never gate every row on the mutation's `isPending` — one pending row would disable the whole list (misleading shared loading state, found in the 2026-08-05 UI review).
+
+**Pattern**: track which row + action is pending in local state, keyed by id:
+
+```ts
+const [pendingAction, setPendingAction] = useState<
+  { id: string; kind: "check" | "toggle" } | null
+>(null);
+
+const handleCheck = (id: string) => {
+  setPendingAction({ id, kind: "check" });
+  checkNow.mutate(id, {
+    onError: (err) => setActionError(err.message),
+    onSettled: () => setPendingAction(null), // re-enables on failure too
+  });
+};
+
+// Row render: disable + spinner ONLY when pendingAction matches this row+kind
+const isPending =
+  pendingAction?.id === product.id && pendingAction.kind === "check";
+```
+
+- Clear in `onSettled`, not just `onSuccess`/`onError`, so a failed mutation re-enables the row.
+- Delete actions keep their own single `deletingId` state; the inline-confirm row uses a separate `confirmingDeleteId` (switching to a different row's Delete naturally moves the confirm state).
+
 ## Best Practices
 
 1. **Single Responsibility**: Each hook should have one clear purpose
@@ -318,6 +345,7 @@ export function useUserOrders(userId: string) {
 4. **Loading States**: Expose loading states for UI feedback
 5. **Cache Keys**: Use consistent, hierarchical query keys
 6. **Type Safety**: Always maintain proper TypeScript types
+7. **Auto-refresh**: Prefer `refetchInterval` on the query itself (e.g. 30_000) over window-focus refetch when a list should stay fresh while mounted.
 
 ## Common Pitfalls
 

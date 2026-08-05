@@ -435,6 +435,38 @@ export function Modal({ open, onClose, children }: ModalProps) {
 </div>
 ```
 
+## Transient "Saved." Feedback
+
+Never render success text from a mutation's `isSuccess` — it stays `true` indefinitely after the first save, so "Saved." lingers forever (found in the 2026-08-05 UI review).
+
+**Pattern**: timestamp + timeout, cleared on the next field edit:
+
+```ts
+const [savedAt, setSavedAt] = useState<number | null>(null);
+
+useEffect(() => {
+  if (savedAt === null) return;
+  const timer = setTimeout(() => setSavedAt(null), 3000);
+  return () => clearTimeout(timer);
+}, [savedAt]);
+
+// onSubmit success: setSavedAt(Date.now())
+// every field onChange: setSavedAt(null)  ← resets on next edit
+// render: {savedAt !== null ? <p className="text-sm text-emerald-700">Saved.</p> : null}
+```
+
+Apply to all save forms (product edit, user settings, admin settings). Each field's `onChange` must call `setSavedAt(null)` — not just the first field.
+
+## Relative Time + Full Timestamp Tooltip
+
+When showing "last checked" style freshness, render a relative value from `formatRelativeTime` (in `components/ui.tsx`: "just now", "5m ago", "3h ago", "2d ago", then `toLocaleDateString`) and expose the full timestamp via `title`:
+
+```tsx
+<span title={formatDateTime(date)}>{formatRelativeTime(date)}</span>
+```
+
+Relative times are client-side only — keep them inside `AuthGate`-gated (client-resolved) pages to avoid SSR/hydration mismatch.
+
 ## Best Practices
 
 1. **Server First**: Default to Server Components
@@ -443,6 +475,7 @@ export function Modal({ open, onClose, children }: ModalProps) {
 4. **Accessibility**: Include ARIA labels and keyboard support
 5. **Type Props**: Define TypeScript interfaces for all props
 6. **Composition**: Break large components into smaller pieces
+7. **Visible feedback**: Every mutation should show pending, success (transient), and error states — never silent failures.
 
 ## Anti-Patterns
 
