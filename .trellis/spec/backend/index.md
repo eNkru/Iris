@@ -22,6 +22,7 @@
 | [logging.md](./logging.md)                           | Structured logging, Sentry tracing, telemetry      | Debugging, observability           |
 | [performance.md](./performance.md)                   | Concurrency, caching, batch processing, streaming  | Performance optimization           |
 | [ai-sdk-integration.md](./ai-sdk-integration.md)     | Vercel AI SDK, tool calling, prompt patterns       | AI-powered features                |
+| [notifications-telegram.md](./notifications-telegram.md) | Telegram adapter, HTML escaping, summary delivery | Telegram/summary work          |
 | [quality.md](./quality.md)                           | Pre-commit checklist for backend code              | Before committing                  |
 
 ---
@@ -147,6 +148,7 @@
 | Auth Configuration   | `packages/auth/auth.ts`                 |
 | Auth Client          | `packages/auth/client.ts`               |
 | Shared Utils/Enums   | `packages/utils/`                       |
+| Notifications module | `packages/prices/src/notifications/`    |
 
 ---
 
