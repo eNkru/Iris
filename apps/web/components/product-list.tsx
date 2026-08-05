@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useCheckNow, useDeleteProduct, useProducts, useUpdateProduct } from "../hooks/use-products";
+import { useSendSummary } from "../hooks/use-channels";
+import { TelegramHelpTooltip } from "./telegram-help-tooltip";
 import {
   ButtonDanger,
   ButtonSecondary,
   Card,
   ErrorBox,
   Spinner,
+  SuccessBox,
   formatDateTime,
   formatPrice,
   formatRelativeTime,
@@ -23,6 +26,7 @@ export function ProductList() {
   const checkNow = useCheckNow();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
+  const sendSummary = useSendSummary();
   const [pendingAction, setPendingAction] = useState<{
     id: string;
     kind: "check" | "toggle";
@@ -30,6 +34,7 @@ export function ProductList() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [summarySent, setSummarySent] = useState<string | null>(null);
 
   const products = data?.products ?? [];
 
@@ -74,6 +79,21 @@ export function ProductList() {
     }
   };
 
+  const handleSendSummary = () => {
+    setActionError(null);
+    setSummarySent(null);
+    sendSummary.mutate(undefined, {
+      onSuccess: (data) => {
+        setSummarySent(
+          `Summary sent to your Telegram (${data.productsCount} ${
+            data.productsCount === 1 ? "item" : "items"
+          })`,
+        );
+      },
+      onError: (err) => setActionError(err.message),
+    });
+  };
+
   if (isLoading) {
     return <Spinner label="Loading products…" />;
   }
@@ -84,9 +104,28 @@ export function ProductList() {
 
   if (products.length === 0) {
     return (
-      <Card className="text-center text-slate-500">
-        No products yet — add your first product URL above.
-      </Card>
+      <div className="space-y-3">
+        <Card className="text-center text-slate-500">
+          No products yet — add your first product URL above.
+        </Card>
+        {actionError ? <ErrorBox message={actionError} /> : null}
+        <div className="flex items-center justify-end gap-3">
+          {summarySent ? <SuccessBox message={summarySent} /> : null}
+          <div className="flex items-center gap-2">
+            <TelegramHelpTooltip />
+            <ButtonSecondary
+              onClick={handleSendSummary}
+              disabled={sendSummary.isPending}
+            >
+              {sendSummary.isPending ? (
+                <Spinner label="Sending…" />
+              ) : (
+                "Send summary to Telegram"
+              )}
+            </ButtonSecondary>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -181,7 +220,21 @@ export function ProductList() {
           </Card>
         );
       })}
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {summarySent ? <SuccessBox message={summarySent} /> : null}
+        <div className="flex items-center gap-2">
+          <TelegramHelpTooltip />
+          <ButtonSecondary
+            onClick={handleSendSummary}
+            disabled={sendSummary.isPending}
+          >
+            {sendSummary.isPending ? (
+              <Spinner label="Sending…" />
+            ) : (
+              "Send summary to Telegram"
+            )}
+          </ButtonSecondary>
+        </div>
         <ButtonSecondary onClick={() => refetch()}>Refresh</ButtonSecondary>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { createChannel } from "./procedures/create";
 import { deleteChannel } from "./procedures/delete";
 import { listChannels } from "./procedures/list";
+import { sendSummary } from "./procedures/send-summary";
 import { updateChannel } from "./procedures/update";
 
 export const channelsRouter = {
@@ -8,4 +9,5 @@ export const channelsRouter = {
   create: createChannel,
   update: updateChannel,
   delete: deleteChannel,
+  sendSummary,
 };

@@ -65,3 +65,16 @@ export type UpdateChannelOutput = z.infer<typeof updateChannelOutputSchema>;
 
 export const deleteChannelOutputSchema = okResultSchema;
 export type DeleteChannelOutput = z.infer<typeof deleteChannelOutputSchema>;
+
+/**
+ * Result of sending a product summary to the user's Telegram channel(s)
+ * (design.md — "Send summary to Telegram").
+ */
+export const sendSummaryOutputSchema = z.object({
+  success: z.literal(true),
+  reason: z.string(),
+  sent: z.number().int().min(0),
+  total: z.number().int().min(0),
+  productsCount: z.number().int().min(0),
+});
+export type SendSummaryOutput = z.infer<typeof sendSummaryOutputSchema>;

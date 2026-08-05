@@ -54,3 +54,9 @@ export function useDeleteChannel() {
     },
   });
 }
+
+export function useSendSummary() {
+  return useMutation({
+    mutationFn: () => orpcClient.channels.sendSummary(),
+  });
+}
