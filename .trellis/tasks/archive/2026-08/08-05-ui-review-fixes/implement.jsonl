@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/08-05-ui-review-fixes/prd.md", "reason": "Requirements R1-R15 and acceptance criteria AC1-AC16 for this task"}
+{"file": ".trellis/tasks/08-05-ui-review-fixes/design.md", "reason": "Per-component technical design: primitives, list state, chart, settings forms, favicon"}
+{"file": ".trellis/tasks/08-05-ui-review-fixes/implement.md", "reason": "Ordered execution checklist with validation commands and rollback points"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Server/client component rules and semantic HTML conventions for apps/web components"}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "React Query hook patterns — useProducts refetchInterval change"}
+{"file": ".trellis/spec/frontend/css-layout.md", "reason": "Tailwind focus-visible, responsive and layout patterns for ui.tsx primitives"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "nuqs URL state contract the chart SegmentedControl must preserve"}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Strict typing rules for new primitives (SegmentedControl generics, format helpers)"}

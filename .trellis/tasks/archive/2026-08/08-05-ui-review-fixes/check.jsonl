@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/08-05-ui-review-fixes/prd.md", "reason": "AC1-AC16 are the check targets; every AC maps to a requirement ID"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Pre-commit quality checklist for apps/web changes"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Verify button/link semantics and client-component rules in changed files"}
+{"file": ".trellis/spec/frontend/css-layout.md", "reason": "Verify focus-visible and responsive behavior of new primitives"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Repo-wide code quality standards for the review pass"}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Type-safety standards; typecheck must pass with no any/@ts-expect-error"}
