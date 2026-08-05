@@ -3,7 +3,7 @@
 import { authClient } from "@iris/auth/client";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { Button, Card, ErrorBox, Input, Label, SuccessBox } from "../../components/ui";
+import { Button, ButtonSecondary, Card, ErrorBox, Input, Label } from "../../components/ui";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -45,7 +45,21 @@ function LoginForm() {
 
   if (sent) {
     return (
-      <SuccessBox message={`Check your inbox at ${email.trim()} for the login link.`} />
+      <div className="space-y-4">
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          We sent a login link to <span className="font-medium">{email.trim()}</span>.
+          Check your inbox — if it isn&apos;t there in a minute, check your spam
+          or junk folder.
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button type="button" onClick={() => setSent(false)} className="w-full">
+            Resend link
+          </Button>
+          <ButtonSecondary onClick={() => setSent(false)} className="w-full">
+            Use a different email
+          </ButtonSecondary>
+        </div>
+      </div>
     );
   }
 
@@ -79,8 +93,8 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <h1 className="mb-1 text-2xl font-semibold">Iris</h1>
         <p className="mb-6 text-sm text-slate-500">
-          Price tracking &amp; alerts. Sign in with your email — we will send you a
-          magic link.
+          Price tracking &amp; alerts. Enter your email and we&apos;ll send you
+          a sign-in link.
         </p>
         <Suspense fallback={null}>
           <LoginForm />

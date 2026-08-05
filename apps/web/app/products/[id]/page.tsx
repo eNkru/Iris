@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { useCheckNow, useProduct } from "../../../hooks/use-products";
 import { AppNav } from "../../../components/app-nav";
 import { AuthGate } from "../../../components/auth-gate";
@@ -14,6 +15,7 @@ import {
   Spinner,
   formatDateTime,
   formatPrice,
+  formatRelativeTime,
 } from "../../../components/ui";
 
 export default function ProductDetailPage() {
@@ -21,6 +23,7 @@ export default function ProductDetailPage() {
   const id = params?.id ?? "";
   const { data, isLoading, isError, error } = useProduct(id);
   const checkNow = useCheckNow();
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -62,8 +65,8 @@ export default function ProductDetailPage() {
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">
             ← Back to products
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold">
-            {product.name ?? "Untitled product"}
+          <h1 className="mt-2 truncate text-2xl font-semibold" title={product.url}>
+            {product.name ?? product.url}
           </h1>
           <p className="truncate text-sm text-slate-400">{product.url}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
@@ -77,18 +80,34 @@ export default function ProductDetailPage() {
             ) : (
               <span>No price recorded yet</span>
             )}
-            <span>Last checked: {formatDateTime(product.lastCheckedAt)}</span>
+            <span>
+              Last checked:{" "}
+              <span title={formatDateTime(product.lastCheckedAt)}>
+                {formatRelativeTime(product.lastCheckedAt)}
+              </span>
+            </span>
             <span className={product.active ? "text-emerald-600" : "text-slate-400"}>
               {product.active ? "Active" : "Paused"}
             </span>
           </div>
           <div className="mt-3">
             <ButtonSecondary
-              onClick={() => checkNow.mutate({ id: product.id })}
+              onClick={() => {
+                setCheckError(null);
+                checkNow.reset();
+                checkNow.mutate({ id: product.id }, {
+                  onError: (err) => setCheckError(err.message),
+                });
+              }}
               disabled={checkNow.isPending}
             >
               {checkNow.isPending ? <Spinner label="Checking…" /> : "Check now"}
             </ButtonSecondary>
+            {checkError ? (
+              <div className="mt-2">
+                <ErrorBox message={checkError} />
+              </div>
+            ) : null}
             {checkNow.data?.check.status === "changed" ? (
               <p className="mt-2 text-sm text-emerald-700">
                 Price changed:{" "}
@@ -119,7 +138,7 @@ export default function ProductDetailPage() {
 
         <Card>
           <h2 className="mb-3 text-lg font-semibold">Price history</h2>
-          <PriceChart history={history} />
+          <PriceChart history={history} currency={product.currency} />
         </Card>
 
         <Card>

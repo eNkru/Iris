@@ -26,7 +26,7 @@ export function AppNav() {
     return (
       <Link
         href={href}
-        className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+        className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-1 ${
           active ? "bg-slate-200 text-slate-900" : "text-slate-600 hover:text-slate-900"
         }`}
       >

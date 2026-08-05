@@ -12,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import type { ProductHistory } from "../hooks/use-products";
-import { ButtonSecondary } from "./ui";
+import { formatPrice, SegmentedControl } from "./ui";
 
 const RANGE_OPTIONS = [
   { value: "7d", label: "7 days" },
@@ -29,9 +29,16 @@ function isRangeValue(value: string | null): value is RangeValue {
 /**
  * Change-point price trend chart (R13) with a nuqs-backed time-range selector
  * (design.md: 7d/30d/all). Readings are the compact change-point series; the
- * chart draws a step after each price change.
+ * chart draws a step after each price change. `currency` (when known) is shown
+ * in the tooltip series label and Y-axis ticks (R11/R9).
  */
-export function PriceChart({ history }: { history: ProductHistory }) {
+export function PriceChart({
+  history,
+  currency,
+}: {
+  history: ProductHistory;
+  currency: string | null;
+}) {
   const [range, setRange] = useQueryState<RangeValue>("range", {
     defaultValue: "30d",
     parse: (value) => (isRangeValue(value) ? value : "30d"),
@@ -59,19 +66,12 @@ export function PriceChart({ history }: { history: ProductHistory }) {
     <div>
       <div className="mb-2 flex items-center gap-2">
         <span className="text-sm font-medium text-slate-700">Range</span>
-        {RANGE_OPTIONS.map((option) => (
-          <ButtonSecondary
-            key={option.value}
-            onClick={() => setRange(option.value)}
-            className={
-              range === option.value
-                ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-                : ""
-            }
-          >
-            {option.label}
-          </ButtonSecondary>
-        ))}
+        <SegmentedControl
+          options={RANGE_OPTIONS}
+          value={range}
+          onChange={setRange}
+          label="Chart range"
+        />
       </div>
 
       <div className="h-72 w-full">
@@ -91,7 +91,7 @@ export function PriceChart({ history }: { history: ProductHistory }) {
             />
             <YAxis
               domain={["auto", "auto"]}
-              tickFormatter={(value: number) => value.toFixed(2)}
+              tickFormatter={(value: number) => formatPrice(value, currency)}
               stroke="#94a3b8"
               fontSize={12}
               width={70}
@@ -100,7 +100,10 @@ export function PriceChart({ history }: { history: ProductHistory }) {
               labelFormatter={(value) =>
                 new Date(String(value)).toLocaleString()
               }
-              formatter={(value) => [Number(value).toFixed(2), "Price"]}
+              formatter={(value) => [
+                formatPrice(Number(value), currency),
+                currency ? `Price (${currency})` : "Price",
+              ]}
             />
             <Line
               type="stepAfter"

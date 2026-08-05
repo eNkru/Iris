@@ -127,7 +127,11 @@ export function ChannelsSection() {
             disabled={createChannel.isPending}
           />
           <p className="mt-1 text-xs text-slate-400">
-            The numeric chat id of your Telegram conversation with the bot.
+            Find your chat id by messaging the bot — you must start the
+            conversation first, because the bot can&apos;t message you until you
+            do.
+            Send it /start and use its reply, or ask @userinfobot. Example:
+            <code className="ml-1 rounded bg-slate-100 px-1">123456789</code>.
           </p>
         </div>
         {errorMessage ? <ErrorBox message={errorMessage} /> : null}

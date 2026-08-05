@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { ProductOutput } from "../hooks/use-products";
 import { useUpdateProduct } from "../hooks/use-products";
 import { Button, ButtonSecondary, ErrorBox, Input, Label, Spinner } from "./ui";
@@ -21,10 +21,28 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
   const [riseAbs, setRiseAbs] = useState(product.alertRules?.riseAbs?.toString() ?? "");
   const [fallAbs, setFallAbs] = useState(product.alertRules?.fallAbs?.toString() ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Transient "Saved." feedback (R8): clears after ~3s.
+  useEffect(() => {
+    if (savedAt === null) {
+      return;
+    }
+    const timer = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(timer);
+  }, [savedAt]);
+
+  const silentConfig =
+    !anyChange &&
+    risePct === "" &&
+    fallPct === "" &&
+    riseAbs === "" &&
+    fallAbs === "";
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+    setSavedAt(null);
 
     const parsedInterval = pollIntervalMinutes === "" ? null : Number(pollIntervalMinutes);
     if (parsedInterval !== null && (!Number.isInteger(parsedInterval) || parsedInterval < 1)) {
@@ -47,6 +65,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
         alertRules,
         active: product.active,
       });
+      setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save product settings.");
     }
@@ -64,7 +83,10 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
         min="0"
         step="any"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setSavedAt(null);
+          setValue(e.target.value);
+        }}
       />
     </div>
   );
@@ -79,7 +101,10 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
           step="1"
           placeholder="Empty = use default"
           value={pollIntervalMinutes}
-          onChange={(e) => setPollIntervalMinutes(e.target.value)}
+          onChange={(e) => {
+            setSavedAt(null);
+            setPollIntervalMinutes(e.target.value);
+          }}
         />
         <p className="mt-1 text-xs text-slate-400">
           How often the background scheduler checks this product.
@@ -92,7 +117,10 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
             id="any-change"
             type="checkbox"
             checked={anyChange}
-            onChange={(e) => setAnyChange(e.target.checked)}
+            onChange={(e) => {
+              setSavedAt(null);
+              setAnyChange(e.target.checked);
+            }}
             className="h-4 w-4 rounded border-slate-300"
           />
           <Label htmlFor="any-change" className="mb-0">
@@ -107,12 +135,19 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
           {numberField("Fall threshold (abs)", fallAbs, setFallAbs)}
         </div>
         <p className="text-xs text-slate-400">
-          Optional. Leave blank to only alert on any change.
+          Thresholds are direction-specific. Blank thresholds + &quot;any
+          change&quot; off = no alerts.
         </p>
+        {silentConfig ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            No alert rules are active — price changes for this product won&apos;t
+            send notifications.
+          </div>
+        ) : null}
       </div>
 
       {error ? <ErrorBox message={error} /> : null}
-      {updateProduct.isSuccess ? (
+      {savedAt !== null ? (
         <p className="text-sm text-emerald-700">Saved.</p>
       ) : null}
 

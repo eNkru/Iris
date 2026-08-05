@@ -15,6 +15,16 @@ export function UserSettingsSection() {
   const [pollInterval, setPollInterval] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Transient "Saved." feedback (R8): clears after ~3s.
+  useEffect(() => {
+    if (savedAt === null) {
+      return;
+    }
+    const timer = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(timer);
+  }, [savedAt]);
 
   // Seed the form once settings arrive from the server.
   useEffect(() => {
@@ -27,6 +37,7 @@ export function UserSettingsSection() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setErrorMessage(null);
+    setSavedAt(null);
 
     const parsed = pollInterval === "" ? null : Number(pollInterval);
     if (parsed !== null && (!Number.isInteger(parsed) || parsed < 1)) {
@@ -36,6 +47,7 @@ export function UserSettingsSection() {
 
     try {
       await updateUserSettings.mutateAsync({ pollIntervalDefaultMinutes: parsed });
+      setSavedAt(Date.now());
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save settings.");
     }
@@ -60,7 +72,10 @@ export function UserSettingsSection() {
               step="1"
               placeholder="Empty = use instance default"
               value={pollInterval}
-              onChange={(e) => setPollInterval(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setPollInterval(e.target.value);
+              }}
               disabled={updateUserSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -68,7 +83,7 @@ export function UserSettingsSection() {
             </p>
           </div>
           {errorMessage ? <ErrorBox message={errorMessage} /> : null}
-          {updateUserSettings.isSuccess ? (
+          {savedAt !== null ? (
             <p className="text-sm text-emerald-700">Saved.</p>
           ) : null}
           <Button type="submit" disabled={updateUserSettings.isPending}>

@@ -28,6 +28,8 @@ export function useProducts(active?: boolean) {
   return useQuery({
     queryKey: [...PRODUCTS_KEY, { active: active ?? "all" }],
     queryFn: () => orpcClient.products.list(active !== undefined ? { active } : {}),
+    // Keep the home-page list fresh while mounted (R6). Only this query opts in.
+    refetchInterval: 30_000,
   });
 }
 

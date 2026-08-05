@@ -21,6 +21,16 @@ export function AdminSettingsSection() {
   const [botToken, setBotToken] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Transient "Saved." feedback (R8): clears after ~3s.
+  useEffect(() => {
+    if (savedAt === null) {
+      return;
+    }
+    const timer = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(timer);
+  }, [savedAt]);
 
   useEffect(() => {
     if (data && !hasLoaded) {
@@ -36,6 +46,7 @@ export function AdminSettingsSection() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setErrorMessage(null);
+    setSavedAt(null);
 
     const parsedInterval = Number(pollInterval);
     if (!Number.isInteger(parsedInterval) || parsedInterval < 1) {
@@ -60,6 +71,7 @@ export function AdminSettingsSection() {
       });
       setAiApiKey("");
       setBotToken("");
+      setSavedAt(Date.now());
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save global settings.");
     }
@@ -85,7 +97,10 @@ export function AdminSettingsSection() {
               required
               placeholder="https://api.openai.com/v1"
               value={aiBaseUrl}
-              onChange={(e) => setAiBaseUrl(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiBaseUrl(e.target.value);
+              }}
               disabled={updateGlobalSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -102,7 +117,10 @@ export function AdminSettingsSection() {
               autoComplete="off"
               placeholder="Leave empty to keep the stored key"
               value={aiApiKey}
-              onChange={(e) => setAiApiKey(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiApiKey(e.target.value);
+              }}
               disabled={updateGlobalSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -120,7 +138,10 @@ export function AdminSettingsSection() {
               required
               placeholder="e.g. gpt-4o-mini, deepseek-v4-flash-free, llama3.1"
               value={aiModel}
-              onChange={(e) => setAiModel(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiModel(e.target.value);
+              }}
               disabled={updateGlobalSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -137,7 +158,10 @@ export function AdminSettingsSection() {
               step="1"
               required
               value={pollInterval}
-              onChange={(e) => setPollInterval(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setPollInterval(e.target.value);
+              }}
               disabled={updateGlobalSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -153,7 +177,10 @@ export function AdminSettingsSection() {
               autoComplete="off"
               placeholder="Leave empty to keep the stored token"
               value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
+              onChange={(e) => {
+                setSavedAt(null);
+                setBotToken(e.target.value);
+              }}
               disabled={updateGlobalSettings.isPending}
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -164,7 +191,7 @@ export function AdminSettingsSection() {
           </div>
 
           {errorMessage ? <ErrorBox message={errorMessage} /> : null}
-          {updateGlobalSettings.isSuccess ? (
+          {savedAt !== null ? (
             <p className="text-sm text-emerald-700">Saved.</p>
           ) : null}
           <Button type="submit" disabled={updateGlobalSettings.isPending}>
