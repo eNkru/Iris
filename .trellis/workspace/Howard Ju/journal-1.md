@@ -206,3 +206,41 @@ Applied the 2026-08-05 UX/UI review of the Iris web app (apps/web), pure-fronten
 ### Next Steps
 
 - None - task complete
+
+---
+
+## Session: Send product summary to Telegram from UI
+
+**Date**: 2026-08-06
+**Task**: 08-05-send-summary-to-telegram
+**Branch**: `main`
+
+### Summary
+
+Added a "Send summary to Telegram" button to the Products page that dispatches a summary of all tracked products (active + paused) to the user's enabled Telegram channel(s). Refactored `packages/prices/src/notifications/telegram.ts` to extract the low-level `sendTelegramText(chatId, text, meta?)` sender (token resolution, p-limit, 10s timeout, error-swallowing, structured logging, `parse_mode: HTML` with plain-text 400 retry); added `format.ts` escaping/grouping helpers (`escapeTelegramHtml`, `formatTelegramLink`, `formatPriceGrouped`); added `summary.ts` (`formatProductSummaryMessage`, `formatRelativeTime`, `sendProductSummary`); new oRPC `channels.sendSummary` (POST /channels/summary, PRECONDITION_FAILED on no channel); `useSendSummary()` hook + button + SuccessBox/ErrorBox in product-list.tsx; shared `TelegramHelpTooltip` setup guidance. All typecheck/lint/build green.
+
+### Main Changes
+
+- Backend: telegram.ts extraction, format.ts HTML helpers, summary.ts module, channels sendSummary procedure + schema + router.
+- Frontend: useSendSummary hook, product-list button + transient feedback, telegram-help-tooltip.tsx.
+- Spec: added `.trellis/spec/backend/notifications-telegram.md` executable contracts + index entry.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c34af1` | feat(prices): send product summary to Telegram from UI |
+| `950a801` | docs(spec): add telegram notifications code spec |
+| `8dde1d9` | chore(task): archive 08-05-send-summary-to-telegram |
+
+### Testing
+
+- `pnpm --filter @iris/prices|api|web typecheck` pass; `pnpm lint` pass; `pnpm build` pass.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Dark/light mode + multi-language (en/zh) — new task.
