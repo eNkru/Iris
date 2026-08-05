@@ -172,3 +172,37 @@ Replaced Playwright Chromium with a required Camoufox sidecar as the single page
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Frontend UX/UI review fixes
+
+**Date**: 2026-08-05
+**Task**: Frontend UX/UI review fixes
+**Branch**: `main`
+
+### Summary
+
+Applied the 2026-08-05 UX/UI review of the Iris web app (apps/web), pure-frontend. Fixed misleading states: per-row pending action state in the product list (R1), inline check-now error on product detail (R2), silent alert-config warning (R3). UX gaps: Paused badge + muted styling (R4), inline delete confirm replacing window.confirm (R5), relative last-checked times + 30s auto-refresh (R6), Telegram chat-id guidance (R7), transient 3s 'Saved.' feedback on all three settings forms (R8). Polish/a11y: Intl.NumberFormat formatPrice with try/catch fallback (R9), new dependency-free SegmentedControl for chart range (R10), chart currency context (R11), focus-visible rings on buttons + nav links (R12), detail title falls back to URL (R13), login copy + spam hint + resend path (R14), app/icon.svg favicon (R15). All AC1-AC16 pass; typecheck + lint clean. Updated frontend specs with transient-feedback and per-row-pending patterns.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8924b1f` | (see git log) |
+| `3066e42` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
