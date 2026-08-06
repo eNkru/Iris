@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useUpdateUserSettings, useUserSettings } from "../hooks/use-settings";
+import { useI18n } from "../lib/i18n";
 import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
 
 /**
@@ -9,6 +10,7 @@ import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
  * have no per-product override. Empty = fall back to the instance default.
  */
 export function UserSettingsSection() {
+  const { t } = useI18n();
   const { data, isLoading, isError, error } = useUserSettings();
   const updateUserSettings = useUpdateUserSettings();
 
@@ -41,7 +43,7 @@ export function UserSettingsSection() {
 
     const parsed = pollInterval === "" ? null : Number(pollInterval);
     if (parsed !== null && (!Number.isInteger(parsed) || parsed < 1)) {
-      setErrorMessage("Poll interval must be a whole number of minutes (or empty).");
+      setErrorMessage(t("userSettings.intervalInvalid"));
       return;
     }
 
@@ -49,28 +51,32 @@ export function UserSettingsSection() {
       await updateUserSettings.mutateAsync({ pollIntervalDefaultMinutes: parsed });
       setSavedAt(Date.now());
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to save settings.");
+      setErrorMessage(
+        err instanceof Error ? err.message : t("userSettings.saveError"),
+      );
     }
   };
 
   return (
     <div className="space-y-4">
-      {isLoading ? <Spinner label="Loading settings…" /> : null}
+      {isLoading ? <Spinner label={t("userSettings.loading")} /> : null}
       {isError ? (
         <ErrorBox
-          message={error instanceof Error ? error.message : "Failed to load settings."}
+          message={error instanceof Error ? error.message : t("userSettings.loadError")}
         />
       ) : null}
       {!isLoading && !isError ? (
         <form onSubmit={onSubmit} className="max-w-md space-y-3">
           <div>
-            <Label htmlFor="default-interval">Default poll interval (minutes)</Label>
+            <Label htmlFor="default-interval">
+              {t("userSettings.intervalLabel")}
+            </Label>
             <Input
               id="default-interval"
               type="number"
               min="1"
               step="1"
-              placeholder="Empty = use instance default"
+              placeholder={t("userSettings.intervalPlaceholder")}
               value={pollInterval}
               onChange={(e) => {
                 setSavedAt(null);
@@ -78,16 +84,22 @@ export function UserSettingsSection() {
               }}
               disabled={updateUserSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              Applied to new products and products without their own interval.
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("userSettings.intervalHint")}
             </p>
           </div>
           {errorMessage ? <ErrorBox message={errorMessage} /> : null}
           {savedAt !== null ? (
-            <p className="text-sm text-emerald-700">Saved.</p>
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">
+              {t("userSettings.saved")}
+            </p>
           ) : null}
           <Button type="submit" disabled={updateUserSettings.isPending}>
-            {updateUserSettings.isPending ? <Spinner label="Saving…" /> : "Save settings"}
+            {updateUserSettings.isPending ? (
+              <Spinner label={t("userSettings.saving")} />
+            ) : (
+              t("userSettings.submit")
+            )}
           </Button>
         </form>
       ) : null}

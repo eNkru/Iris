@@ -31,21 +31,39 @@ export async function sendTelegramText(
   meta?: Record<string, unknown>,
 ): Promise<void>;
 
+// packages/prices/src/notifications/format.ts
+// Notifications are localized; every formatter takes `lang: Language = "en"`.
+// `Language` = `"en" | "zh"` (z.enum(LANGUAGE_VALUES) from @iris/utils).
+export function formatPriceAlertMessage(
+  notification: PriceAlertNotification,
+  lang: Language = "en",
+): string;
+
 // packages/prices/src/notifications/summary.ts
-export function formatProductSummaryMessage(items: ProductSummarySource[]): string;
-export function formatRelativeTime(date: Date | null): string;
+export function formatProductSummaryMessage(
+  items: ProductSummarySource[],
+  lang: Language = "en",
+): string;
+export function formatRelativeTime(date: Date | null, lang: Language = "en"): string;
 export async function sendProductSummary(userId: string): Promise<{
-  sent: number;        // channels that received the message
+  sent: number;        // channels that received a message
   total: number;       // enabled telegram channels targeted
   productsCount: number;
 }>;
 ```
+
+The `lang` parameter **defaults to `"en"`** so all pre-existing non-localized
+callers/backfills behave identically (bounded blast radius; unset channel
+configs get the English default).
 
 ## Contracts
 
 - **Bot token resolution**: `global_settings.telegramBotToken` first, falling
   back to `TELEGRAM_BOT_TOKEN` env var. No token → warn + skip (no throw).
 - **Empty chatId** (`""` or whitespace) → warn + skip.
+- **Per-channel language**: each `alert_channels` row stores
+  `config.language` (`"en" | "zh"`), validated on channel create/update by
+  `languageZodSchema`. Missing/invalid value resolves to `"en"` at send time.
 - **`sendTelegramText`** posts `chat_id`, `text`, `parse_mode: "HTML"`,
   `disable_web_page_preview: true`. Runs inside the shared `p-limit`
   limiter (`TELEGRAM_CONCURRENCY`). HTTP non-OK → retry once as plain text
@@ -59,7 +77,13 @@ export async function sendProductSummary(userId: string): Promise<{
   (`N tracked · A active · P paused`), one card per product: number keycap,
   `<b>`-wrapped clickable name link, `💰` price line, `✅ Active` / `⏸️ Paused`
   + `checked <relative time>`. Empty products → header + "No products tracked
-  yet." line (still sends).
+  yet." line (still sends). The localized header/prose come from
+  `summaryText[lang]` / `priceAlertText[lang]`.
+- **Per-language message batching**: `sendProductSummary` groups enabled
+  channels by `config.language`, building **one message per distinct language**
+  (`en`/`zh`, ≤2 messages) and sharing it across channels in that group via
+  `Promise.all` (never `await` in a loop). Each send carries meta
+  `{ userId, productsCount, language }`.
 
 ## Validation & Error Matrix
 
@@ -67,6 +91,7 @@ export async function sendProductSummary(userId: string): Promise<{
 | -------------------------------- | ------------------------------------------------ |
 | No bot token configured          | warn log, skip (no throw)                        |
 | Empty / whitespace chatId        | warn log, skip                                   |
+| `config.language` missing / invalid | sends with default `"en"`                     |
 | Telegram API 400 (bad markup)    | retry once as plain text; if still failing, log  |
 | Telegram API network/5xx         | log + swallow (message dropped)                  |
 | No enabled telegram channel      | procedure throws PRECONDITION_FAILED             |
@@ -100,6 +125,14 @@ export async function sendProductSummary(userId: string): Promise<{
 - **No per-channel interface method** for summaries (MVP has only telegram);
   add an optional `sendSummary` to `NotificationChannel` if multi-channel
   summaries arrive.
+- **Per-language batching** (`sendProductSummary`): enabled channels are
+  grouped by `config.language` so users with mixed `en`/`zh` channels still get
+  ≤2 summary messages, each built once and shared (reuse the `textByLanguage`
+  map); sends run concurrently via `Promise.all`, never `await` inside a loop.
+- **Backward-compatible `lang` default**: formatters take `lang: Language =
+  "en"` so legacy non-localized callers (e.g. stored notification templates)
+  render identically; message text lives in `summaryText[lang]` /
+  `priceAlertText[lang]` maps keyed by `Language`.
 
 ## Related
 

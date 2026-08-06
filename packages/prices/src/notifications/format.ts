@@ -1,3 +1,4 @@
+import type { Language } from "@iris/utils";
 import type { PriceDirection } from "../pipeline/alert-rules";
 
 /**
@@ -54,14 +55,40 @@ export function formatTelegramLink(url: string, label: string): string {
 }
 
 /**
+ * Localized prose/emoji lines for price alerts. Emoji markers are identical
+ * across languages; only the surrounding text is translated. The fallback
+ * product name and the "View product" link label are user-visible strings that
+ * must be escaped before insertion into the message.
+ */
+const priceAlertText: Record<Language, { rise: string; drop: string; fallbackName: string; viewProduct: string }> = {
+  en: {
+    rise: "📈 <b>Price increase</b>",
+    drop: "📉 <b>Price drop</b>",
+    fallbackName: "Tracked product",
+    viewProduct: "View product",
+  },
+  zh: {
+    rise: "📈 <b>价格上涨</b>",
+    drop: "📉 <b>价格下跌</b>",
+    fallbackName: "追踪商品",
+    viewProduct: "查看商品",
+  },
+};
+
+/**
  * Telegram HTML message for a price alert (parse_mode "HTML"). Bold product
  * name, grouped prices, and a clickable "View product" link instead of a raw
- * URL.
+ * URL. `lang` selects the localized prose; `formatPriceGrouped`,
+ * `escapeTelegramHtml`, `formatTelegramLink`, and percent formatting stay
+ * language-agnostic.
  */
-export function formatPriceAlertMessage(notification: PriceAlertNotification): string {
-  const name = escapeTelegramHtml(notification.productName ?? "Tracked product");
-  const directionLabel =
-    notification.direction === "rise" ? "📈 <b>Price increase</b>" : "📉 <b>Price drop</b>";
+export function formatPriceAlertMessage(
+  notification: PriceAlertNotification,
+  lang: Language = "en",
+): string {
+  const txt = priceAlertText[lang];
+  const name = escapeTelegramHtml(notification.productName ?? txt.fallbackName);
+  const directionLabel = notification.direction === "rise" ? txt.rise : txt.drop;
 
   const currency = notification.currency ?? "";
   const oldLine = formatPriceGrouped(notification.oldPrice, currency);
@@ -78,6 +105,6 @@ export function formatPriceAlertMessage(notification: PriceAlertNotification): s
     directionLabel,
     name,
     `💰 ${oldLine} → ${newLine}${pct !== null ? ` (${pct})` : ""}`,
-    `🔗 ${formatTelegramLink(notification.productUrl, "View product")}`,
+    `🔗 ${formatTelegramLink(notification.productUrl, txt.viewProduct)}`,
   ].join("\n");
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useCheckNow, useDeleteProduct, useProducts, useUpdateProduct } from "../hooks/use-products";
 import { useSendSummary } from "../hooks/use-channels";
+import { useI18n } from "../lib/i18n";
 import { TelegramHelpTooltip } from "./telegram-help-tooltip";
 import {
   ButtonDanger,
@@ -22,6 +23,7 @@ import {
  * actions (view, check now, pause/resume, delete).
  */
 export function ProductList() {
+  const { t } = useI18n();
   const { data, isLoading, isError, error, refetch } = useProducts();
   const checkNow = useCheckNow();
   const updateProduct = useUpdateProduct();
@@ -34,7 +36,7 @@ export function ProductList() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [summarySent, setSummarySent] = useState<string | null>(null);
+  const [summaryCount, setSummaryCount] = useState<number | null>(null);
 
   const products = data?.products ?? [];
 
@@ -73,7 +75,9 @@ export function ProductList() {
     try {
       await deleteProduct.mutateAsync(id);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete product.");
+      setActionError(
+        err instanceof Error ? err.message : t("productList.deleteError"),
+      );
     } finally {
       setDeletingId(null);
     }
@@ -81,49 +85,63 @@ export function ProductList() {
 
   const handleSendSummary = () => {
     setActionError(null);
-    setSummarySent(null);
+    setSummaryCount(null);
     sendSummary.mutate(undefined, {
       onSuccess: (data) => {
-        setSummarySent(
-          `Summary sent to your Telegram (${data.productsCount} ${
-            data.productsCount === 1 ? "item" : "items"
-          })`,
-        );
+        setSummaryCount(data.productsCount);
       },
       onError: (err) => setActionError(err.message),
     });
   };
 
   if (isLoading) {
-    return <Spinner label="Loading products…" />;
+    return <Spinner label={t("productList.loading")} />;
   }
 
   if (isError) {
-    return <ErrorBox message={error instanceof Error ? error.message : "Failed to load products."} />;
+    return (
+      <ErrorBox
+        message={error instanceof Error ? error.message : t("productList.loadError")}
+      />
+    );
   }
+
+  const summaryBox = summaryCount !== null ? (
+    <SuccessBox
+      message={t("productList.summarySent", {
+        n: summaryCount,
+        items: t(
+          summaryCount === 1
+            ? "productList.summarySent.one"
+            : "productList.summarySent.other",
+        ),
+      })}
+    />
+  ) : null;
+
+  const summaryAction = (
+    <div className="flex items-center gap-2">
+      <TelegramHelpTooltip />
+      <ButtonSecondary onClick={handleSendSummary} disabled={sendSummary.isPending}>
+        {sendSummary.isPending ? (
+          <Spinner label={t("productList.sending")} />
+        ) : (
+          t("productList.sendSummary")
+        )}
+      </ButtonSecondary>
+    </div>
+  );
 
   if (products.length === 0) {
     return (
       <div className="space-y-3">
-        <Card className="text-center text-slate-500">
-          No products yet — add your first product URL above.
+        <Card className="text-center text-slate-500 dark:text-slate-400">
+          {t("productList.empty")}
         </Card>
         {actionError ? <ErrorBox message={actionError} /> : null}
         <div className="flex items-center justify-end gap-3">
-          {summarySent ? <SuccessBox message={summarySent} /> : null}
-          <div className="flex items-center gap-2">
-            <TelegramHelpTooltip />
-            <ButtonSecondary
-              onClick={handleSendSummary}
-              disabled={sendSummary.isPending}
-            >
-              {sendSummary.isPending ? (
-                <Spinner label="Sending…" />
-              ) : (
-                "Send summary to Telegram"
-              )}
-            </ButtonSecondary>
-          </div>
+          {summaryBox}
+          {summaryAction}
         </div>
       </div>
     );
@@ -147,36 +165,42 @@ export function ProductList() {
               <div className="flex items-center gap-2">
                 <Link
                   href={`/products/${product.id}`}
-                  className={`block truncate font-medium hover:text-slate-600 ${
-                    product.active ? "text-slate-900" : "text-slate-400"
+                  className={`block truncate font-medium hover:text-slate-600 dark:hover:text-slate-300 ${
+                    product.active
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-slate-400 dark:text-slate-500"
                   }`}
                 >
                   {product.name ?? product.url}
                 </Link>
                 {!product.active ? (
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
-                    Paused
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    {t("productList.paused")}
                   </span>
                 ) : null}
               </div>
-              <p className="truncate text-xs text-slate-400">{product.url}</p>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                {product.url}
+              </p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {product.currentPrice != null ? (
                   <>
                     <span
                       className={`font-semibold ${
-                        product.active ? "text-slate-900" : "text-slate-400"
+                        product.active
+                          ? "text-slate-900 dark:text-slate-100"
+                          : "text-slate-400 dark:text-slate-500"
                       }`}
                     >
                       {formatPrice(product.currentPrice, product.currency)}
                     </span>
-                    {" · checked "}
+                    {t("productList.checked")}
                     <span title={formatDateTime(product.lastCheckedAt)}>
                       {formatRelativeTime(product.lastCheckedAt)}
                     </span>
                   </>
                 ) : (
-                  "No price recorded yet"
+                  t("productList.noPrice")
                 )}
               </p>
             </div>
@@ -185,24 +209,39 @@ export function ProductList() {
                 onClick={() => handleCheckNow(product.id)}
                 disabled={checkPending || togglePending}
               >
-                {checkPending ? <Spinner label="Checking…" /> : "Check now"}
+                {checkPending ? (
+                  <Spinner label={t("detail.checking")} />
+                ) : (
+                  t("productList.checkNow")
+                )}
               </ButtonSecondary>
               <ButtonSecondary
                 onClick={() => handleToggleActive(product.id)}
                 disabled={checkPending || togglePending}
               >
-                {togglePending ? <Spinner label="…" /> : product.active ? "Pause" : "Resume"}
+                {togglePending ? (
+                  <Spinner label="…" />
+                ) : product.active ? (
+                  t("productList.pause")
+                ) : (
+                  t("productList.resume")
+                )}
               </ButtonSecondary>
               {isConfirming ? (
                 <>
-                  <ButtonDanger onClick={() => handleDelete(product.id)} disabled={deletingId !== null}>
-                    {deletingId === product.id ? "Deleting…" : "Confirm delete"}
+                  <ButtonDanger
+                    onClick={() => handleDelete(product.id)}
+                    disabled={deletingId !== null}
+                  >
+                    {deletingId === product.id
+                      ? t("productList.deleting")
+                      : t("productList.confirmDelete")}
                   </ButtonDanger>
                   <ButtonSecondary
                     onClick={() => setConfirmingDeleteId(null)}
                     disabled={deletingId !== null}
                   >
-                    Cancel
+                    {t("productList.cancel")}
                   </ButtonSecondary>
                 </>
               ) : (
@@ -213,7 +252,7 @@ export function ProductList() {
                   }}
                   disabled={confirmingDeleteId !== null && !isConfirming}
                 >
-                  Delete
+                  {t("productList.delete")}
                 </ButtonDanger>
               )}
             </div>
@@ -221,21 +260,11 @@ export function ProductList() {
         );
       })}
       <div className="flex items-center justify-end gap-3">
-        {summarySent ? <SuccessBox message={summarySent} /> : null}
-        <div className="flex items-center gap-2">
-          <TelegramHelpTooltip />
-          <ButtonSecondary
-            onClick={handleSendSummary}
-            disabled={sendSummary.isPending}
-          >
-            {sendSummary.isPending ? (
-              <Spinner label="Sending…" />
-            ) : (
-              "Send summary to Telegram"
-            )}
-          </ButtonSecondary>
-        </div>
-        <ButtonSecondary onClick={() => refetch()}>Refresh</ButtonSecondary>
+        {summaryBox}
+        {summaryAction}
+        <ButtonSecondary onClick={() => refetch()}>
+          {t("productList.refresh")}
+        </ButtonSecondary>
       </div>
     </div>
   );

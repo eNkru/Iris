@@ -370,6 +370,33 @@ module.exports = {
 </div>
 ```
 
+### Dark Mode
+
+Use Tailwind v4 `@custom-variant dark` and semantic CSS variables, not
+hardcoded colors. Never put an opaque light color inline that breaks in dark
+mode.
+
+```css
+/* global.css */
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+:root {
+  --bkg: #fff;  --content: #000;
+  --chart-grid: #94a3b8; --chart-grid-strong: #64748b;
+}
+.dark {
+  --bkg: #0b1220; --content: #e2e8f0; --chart-grid: #334155;
+}
+```
+
+- **Charts (Recharts)**: never hardcode SVG fill/stroke colors. Reference CSS
+  variables (`var(--chart-*)`) defined in both `:root` and `.dark` so a single
+  series reads correctly in both themes. A chart that looked fine in light mode
+  but was near-invisible in dark is a bug, not a surprise.
+- Theme is applied via a `.dark` class on `<html>` (see
+  `apps/web/lib/theme.tsx` `ThemeProvider`); the provider pins the initial
+  theme in an inline script in `layout.tsx` to avoid a flash of the wrong theme.
+
 ## Best Practices Summary
 
 1. **items-stretch**: Default for main flex containers

@@ -12,18 +12,14 @@ import {
   YAxis,
 } from "recharts";
 import type { ProductHistory } from "../hooks/use-products";
+import { useI18n } from "../lib/i18n";
 import { formatPrice, SegmentedControl } from "./ui";
 
-const RANGE_OPTIONS = [
-  { value: "7d", label: "7 days" },
-  { value: "30d", label: "30 days" },
-  { value: "all", label: "All" },
-] as const;
-
-type RangeValue = (typeof RANGE_OPTIONS)[number]["value"];
+const RANGE_VALUES = ["7d", "30d", "all"] as const;
+type RangeValue = (typeof RANGE_VALUES)[number];
 
 function isRangeValue(value: string | null): value is RangeValue {
-  return RANGE_OPTIONS.some((option) => option.value === value);
+  return (RANGE_VALUES as readonly string[]).includes(value ?? "");
 }
 
 /**
@@ -39,11 +35,18 @@ export function PriceChart({
   history: ProductHistory;
   currency: string | null;
 }) {
+  const { t } = useI18n();
   const [range, setRange] = useQueryState<RangeValue>("range", {
     defaultValue: "30d",
     parse: (value) => (isRangeValue(value) ? value : "30d"),
     serialize: (value) => value,
   });
+
+  const rangeOptions = [
+    { value: "7d", label: t("chart.7d") },
+    { value: "30d", label: t("chart.30d") },
+    { value: "all", label: t("chart.all") },
+  ] as const;
 
   const data = useMemo(() => {
     if (range === "all") {
@@ -55,9 +58,9 @@ export function PriceChart({
 
   if (data.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 py-8 text-sm text-slate-500">
-        <span>No price changes in the selected period.</span>
-        <span className="text-xs">Readings are only recorded when the price changes.</span>
+      <div className="flex flex-col items-center gap-2 py-8 text-sm text-slate-500 dark:text-slate-400">
+        <span>{t("chart.empty")}</span>
+        <span className="text-xs">{t("chart.emptyHint")}</span>
       </div>
     );
   }
@@ -65,19 +68,21 @@ export function PriceChart({
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm font-medium text-slate-700">Range</span>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          {t("chart.range")}
+        </span>
         <SegmentedControl
-          options={RANGE_OPTIONS}
+          options={rangeOptions}
           value={range}
           onChange={setRange}
-          label="Chart range"
+          label={t("chart.rangeAria")}
         />
       </div>
 
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
             <XAxis
               dataKey="checkedAt"
               tickFormatter={(value: Date) =>
@@ -86,13 +91,13 @@ export function PriceChart({
                   day: "numeric",
                 })
               }
-              stroke="#94a3b8"
+              stroke="var(--chart-axis)"
               fontSize={12}
             />
             <YAxis
               domain={["auto", "auto"]}
               tickFormatter={(value: number) => formatPrice(value, currency)}
-              stroke="#94a3b8"
+              stroke="var(--chart-axis)"
               fontSize={12}
               width={70}
             />
@@ -102,15 +107,15 @@ export function PriceChart({
               }
               formatter={(value) => [
                 formatPrice(Number(value), currency),
-                currency ? `Price (${currency})` : "Price",
+                currency ? t("chart.priceWithCurrency", { currency }) : t("chart.price"),
               ]}
             />
             <Line
               type="stepAfter"
               dataKey="price"
-              stroke="#0f172a"
+              stroke="var(--chart-line)"
               strokeWidth={2}
-              dot={{ r: 3, fill: "#0f172a" }}
+              dot={{ r: 3, fill: "var(--chart-dot)" }}
               activeDot={{ r: 5 }}
               isAnimationActive={false}
             />

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "UI state (theme + language) lives in React Context; theme/language providers follow the documented appearance-state pattern."}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Shared ui.tsx primitives conventions; dark: variant palette rules for components being styled."}
+{"file": ".trellis/spec/backend/notifications-telegram.md", "reason": "Executable contracts for sendTelegramText, formatPriceAlertMessage/formatProductSummaryMessage signatures and HTML escaping; language param extends these formatters."}
+{"file": ".trellis/spec/backend/orpc-usage.md", "reason": "createChannel/updateChannel procedure schema changes for the optional language field."}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Typed dictionary keys and narrowing for the en/zh t() helper."}

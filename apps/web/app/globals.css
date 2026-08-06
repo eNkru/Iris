@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* Class-based dark mode (Tailwind v4): `.dark` on <html>, toggled by ThemeProvider. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme-aware SVG colors for the Recharts price chart (SVG `stroke` can't take
+   Tailwind utilities directly, so a dependency-free CSS variable is used). */
+:root {
+  --chart-grid: #e2e8f0;
+  --chart-axis: #94a3b8;
+  --chart-line: #0f172a;
+  --chart-dot: #0f172a;
+}
+
+.dark {
+  --chart-grid: #1e293b;
+  --chart-axis: #64748b;
+  --chart-line: #94a3b8;
+  --chart-dot: #e2e8f0;
+}

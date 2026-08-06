@@ -23,10 +23,10 @@
 | [orpc-usage.md](./orpc-usage.md)                     | Type-safe API calls, React Query integration         | **Must Read** |
 | [hooks.md](./hooks.md)                               | Query and mutation hook patterns                     | Reference     |
 | [api-integration.md](./api-integration.md)           | oRPC client, real-time, AI streaming                 | Reference     |
-| [state-management.md](./state-management.md)         | URL state with nuqs, React Context patterns          | Reference     |
+| [state-management.md](./state-management.md)         | React Context, URL state (nuqs), i18n dict/lang context | Reference     |
 | [directory-structure.md](./directory-structure.md)    | Project structure and module conventions             | Reference     |
 | [type-safety.md](./type-safety.md)                   | TypeScript guidelines, type inference, Zod           | Reference     |
-| [css-layout.md](./css-layout.md)                     | CSS patterns, flexbox, responsive, touch             | Reference     |
+| [css-layout.md](./css-layout.md)                     | CSS patterns, dark mode vars, flexbox, responsive     | Reference     |
 | [ai-sdk-integration.md](./ai-sdk-integration.md)     | useChat hook, streaming, tool call handling           | Reference     |
 | [deployment.md](./deployment.md)                     | Instrumentation/edge-runtime guard, Docker deploy     | Reference     |
 | [quality.md](./quality.md)                           | Pre-commit checklist and code quality standards      | Reference     |

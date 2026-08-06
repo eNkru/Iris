@@ -1,5 +1,5 @@
 import pLimit from "p-limit";
-import { getEnv, logger } from "@iris/utils";
+import { getEnv, logger, type Language } from "@iris/utils";
 import { getGlobalSettings } from "@iris/database/drizzle/queries";
 import type { NotificationChannel } from "./channel";
 import { formatPriceAlertMessage, type PriceAlertNotification } from "./format";
@@ -125,11 +125,13 @@ export const telegramChannel: NotificationChannel = {
       return;
     }
 
-    const text = formatPriceAlertMessage(notification);
+    const lang: Language = config.language === "zh" ? "zh" : "en";
+    const text = formatPriceAlertMessage(notification, lang);
 
     await sendTelegramText(chatId, text, {
       productId: notification.productId,
       direction: notification.direction,
+      language: lang,
     });
   },
 };

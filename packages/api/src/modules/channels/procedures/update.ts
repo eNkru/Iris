@@ -21,7 +21,7 @@ export const updateChannel = protectedProcedure
   .input(updateChannelInputSchema)
   .output(updateChannelOutputSchema)
   .handler(async ({ input, context }) => {
-    const { id, enabled, chatId } = input;
+    const { id, enabled, chatId, language } = input;
 
     const [existing] = await db
       .select()
@@ -36,8 +36,19 @@ export const updateChannel = protectedProcedure
     if (enabled !== undefined) {
       set.enabled = enabled;
     }
+
+    // Merge any config edits (chatId and/or language) into the stored config,
+    // preserving the rest. A missing language keeps the stored value; a stored
+    // value absent from config reads as `en` at notification time.
+    const configUpdates: Record<string, unknown> = {};
     if (chatId !== undefined) {
-      set.config = { ...asRecord(existing.config), chatId };
+      configUpdates.chatId = chatId;
+    }
+    if (language !== undefined) {
+      configUpdates.language = language;
+    }
+    if (Object.keys(configUpdates).length > 0) {
+      set.config = { ...asRecord(existing.config), ...configUpdates };
     }
 
     const [updated] = await db

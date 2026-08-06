@@ -321,6 +321,63 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
 }
 ```
 
+## UI Language (i18n) — Project Convention
+
+UI language is **appearance state**: it persists client-side, not in the DB.
+Use a small Context + typed dictionary, **no `next-intl` / URL locale segments**
+(matches the theme context; MVP is `en` + `zh` only).
+
+### Files
+
+- `apps/web/lib/dictionary.ts` — dependency-free typed dictionaries + `t()`.
+  `"use client"`-independent, safe to import in **server components**.
+  - `type Lang = "en" | "zh"`, `LANG_VALUES`
+  - `LANG_STORAGE_KEY = "iris.lang"` (localStorage), `LANG_COOKIE_NAME = "iris.lang"`
+  - `t(lang, key, vars?)` interpolates `{name}` placeholders; missing vars render empty.
+  - **Type-enforced parity**: `DictKey` is derived from the `en` dict, so any
+    missing/invalid `zh` key is a compile-time error.
+- `apps/web/lib/i18n.tsx` — client `LanguageProvider` + `useI18n()`.
+- `apps/web/components/language-toggle.tsx` — the toggle UI.
+- `apps/web/app/lib/get-lang.ts` — async server helper reads the cookie via
+  `cookies()`, returns `"en" | "zh"` (invalid/missing → `"en"`).
+
+### Convention applies to
+
+`t(...)` call signature:
+
+```typescript
+// Dictionary, keyed by lang; DictKey derived from en:
+export function t(lang: Lang, key: DictKey, vars?: Record<string, string | number>): string;
+```
+
+```tsx
+// Server component: read from cookie, translate + set <html lang>:
+const lang = await getLang();
+const title = t(lang, "home.title");
+
+// Client component: hook once, translate from context:
+const { lang, setLang, t, mounted } = useI18n();
+const label = t("nav.products");
+```
+
+### Translation flow
+
+1. Client `LanguageProvider` reads localStorage on init, writes `iris.lang`
+   cookie + `<html lang>`; `useI18n()` returns `{ lang, setLang, t, mounted }`.
+2. `setLang(next)` updates state, persists localStorage, and writes the
+   cookie (server components then render translated text on the next navigation).
+3. Server components use `getLang()` (cookie) → `t(lang, key)`.
+4. Disable `next-intl`-style routing; no `[lang]` URL segment.
+
+### Rules
+
+- **Add the key to `en` first**; TS enforces the `zh` key.
+- **Never hardcode a user-facing string** on a client page/section; add a dict key.
+- **Notifications/server text** live in `@iris/prices` formatters; language is
+  validated by `@iris/utils` `languageZodSchema` / `Language` type. The web
+  `dictionary.ts` only covers UI chrome.
+- **Default to `"en"`** everywhere so legacy/unset configs behave identically.
+
 ## State Debugging
 
 ### React Query DevTools

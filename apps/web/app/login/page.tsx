@@ -3,9 +3,11 @@
 import { authClient } from "@iris/auth/client";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
+import { useI18n } from "../../lib/i18n";
 import { Button, ButtonSecondary, Card, ErrorBox, Input, Label } from "../../components/ui";
 
 function LoginForm() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "/";
 
@@ -19,7 +21,7 @@ function LoginForm() {
     setError(null);
 
     if (!email.trim()) {
-      setError("Please enter your email address.");
+      setError(t("login.emailEmpty"));
       return;
     }
 
@@ -31,13 +33,13 @@ function LoginForm() {
       });
 
       if (authError) {
-        setError(authError.message ?? "Failed to send the login link.");
+        setError(authError.message ?? t("login.sendError"));
         return;
       }
 
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send the login link.");
+      setError(err instanceof Error ? err.message : t("login.sendError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -46,17 +48,15 @@ function LoginForm() {
   if (sent) {
     return (
       <div className="space-y-4">
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          We sent a login link to <span className="font-medium">{email.trim()}</span>.
-          Check your inbox — if it isn&apos;t there in a minute, check your spam
-          or junk folder.
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+          {t("login.sent", { email: email.trim() })}
         </div>
         <div className="flex flex-col gap-2">
           <Button type="button" onClick={() => setSent(false)} className="w-full">
-            Resend link
+            {t("login.resend")}
           </Button>
           <ButtonSecondary onClick={() => setSent(false)} className="w-full">
-            Use a different email
+            {t("login.differentEmail")}
           </ButtonSecondary>
         </div>
       </div>
@@ -66,13 +66,13 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
-        <Label htmlFor="email">Email address</Label>
+        <Label htmlFor="email">{t("login.emailLabel")}</Label>
         <Input
           id="email"
           type="email"
           autoComplete="email"
           required
-          placeholder="you@example.com"
+          placeholder={t("login.emailPlaceholder")}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -81,20 +81,20 @@ function LoginForm() {
       {error ? <ErrorBox message={error} /> : null}
 
       <Button type="submit" disabled={isSubmitting} className="w-full">
-        {isSubmitting ? "Sending…" : "Send login link"}
+        {isSubmitting ? t("login.sending") : t("login.sendLink")}
       </Button>
     </form>
   );
 }
 
 export default function LoginPage() {
+  const { t } = useI18n();
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <Card className="w-full max-w-sm">
-        <h1 className="mb-1 text-2xl font-semibold">Iris</h1>
-        <p className="mb-6 text-sm text-slate-500">
-          Price tracking &amp; alerts. Enter your email and we&apos;ll send you
-          a sign-in link.
+        <h1 className="mb-1 text-2xl font-semibold">{t("login.brand")}</h1>
+        <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
+          {t("login.tagline")}
         </p>
         <Suspense fallback={null}>
           <LoginForm />

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { ProductOutput } from "../hooks/use-products";
 import { useUpdateProduct } from "../hooks/use-products";
+import { useI18n } from "../lib/i18n";
 import { Button, ButtonSecondary, ErrorBox, Input, Label, Spinner } from "./ui";
 
 /**
@@ -10,6 +11,7 @@ import { Button, ButtonSecondary, ErrorBox, Input, Label, Spinner } from "./ui";
  * and the active/paused toggle. Saves via `products.update`.
  */
 export function ProductEditForm({ product }: { product: ProductOutput }) {
+  const { t } = useI18n();
   const updateProduct = useUpdateProduct();
 
   const [pollIntervalMinutes, setPollIntervalMinutes] = useState(
@@ -46,7 +48,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
 
     const parsedInterval = pollIntervalMinutes === "" ? null : Number(pollIntervalMinutes);
     if (parsedInterval !== null && (!Number.isInteger(parsedInterval) || parsedInterval < 1)) {
-      setError("Poll interval must be a whole number of minutes (or empty for the default).");
+      setError(t("editForm.intervalInvalid"));
       return;
     }
 
@@ -67,7 +69,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
       });
       setSavedAt(Date.now());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save product settings.");
+      setError(err instanceof Error ? err.message : t("editForm.saveError"));
     }
   };
 
@@ -94,24 +96,24 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
-        <Label>Poll interval (minutes)</Label>
+        <Label>{t("editForm.intervalLabel")}</Label>
         <Input
           type="number"
           min="1"
           step="1"
-          placeholder="Empty = use default"
+          placeholder={t("editForm.intervalPlaceholder")}
           value={pollIntervalMinutes}
           onChange={(e) => {
             setSavedAt(null);
             setPollIntervalMinutes(e.target.value);
           }}
         />
-        <p className="mt-1 text-xs text-slate-400">
-          How often the background scheduler checks this product.
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          {t("editForm.intervalHint")}
         </p>
       </div>
 
-      <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
         <div className="flex items-center gap-2">
           <input
             id="any-change"
@@ -121,39 +123,43 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
               setSavedAt(null);
               setAnyChange(e.target.checked);
             }}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-slate-300 dark:border-slate-700"
           />
           <Label htmlFor="any-change" className="mb-0">
-            Alert on any price change
+            {t("editForm.anyChange")}
           </Label>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {numberField("Rise threshold (%)", risePct, setRisePct)}
-          {numberField("Fall threshold (%)", fallPct, setFallPct)}
-          {numberField("Rise threshold (abs)", riseAbs, setRiseAbs)}
-          {numberField("Fall threshold (abs)", fallAbs, setFallAbs)}
+          {numberField(t("editForm.risePct"), risePct, setRisePct)}
+          {numberField(t("editForm.fallPct"), fallPct, setFallPct)}
+          {numberField(t("editForm.riseAbs"), riseAbs, setRiseAbs)}
+          {numberField(t("editForm.fallAbs"), fallAbs, setFallAbs)}
         </div>
-        <p className="text-xs text-slate-400">
-          Thresholds are direction-specific. Blank thresholds + &quot;any
-          change&quot; off = no alerts.
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          {t("editForm.thresholdsHint")}
         </p>
         {silentConfig ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            No alert rules are active — price changes for this product won&apos;t
-            send notifications.
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+            {t("editForm.silent")}
           </div>
         ) : null}
       </div>
 
       {error ? <ErrorBox message={error} /> : null}
       {savedAt !== null ? (
-        <p className="text-sm text-emerald-700">Saved.</p>
+        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+          {t("editForm.saved")}
+        </p>
       ) : null}
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={updateProduct.isPending}>
-          {updateProduct.isPending ? <Spinner label="Saving…" /> : "Save changes"}
+          {updateProduct.isPending ? (
+            <Spinner label={t("editForm.saving")} />
+          ) : (
+            t("editForm.saveChanges")
+          )}
         </Button>
         <ButtonSecondary
           type="button"
@@ -165,7 +171,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
           }}
           disabled={updateProduct.isPending}
         >
-          {product.active ? "Pause tracking" : "Resume tracking"}
+          {product.active ? t("editForm.pause") : t("editForm.resume")}
         </ButtonSecondary>
       </div>
     </form>

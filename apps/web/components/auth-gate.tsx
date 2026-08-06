@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { useSession } from "../hooks/use-session";
+import { useI18n } from "../lib/i18n";
 import { Spinner } from "./ui";
 
 /**
@@ -15,6 +16,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loaded } = useSession();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (loaded && !user) {
@@ -27,7 +29,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (!loaded) {
     return (
       <main className="flex min-h-screen items-center justify-center">
-        <Spinner label="Loading…" />
+        <Spinner label={t("authGate.loading")} />
       </main>
     );
   }

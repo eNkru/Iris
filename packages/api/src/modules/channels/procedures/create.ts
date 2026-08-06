@@ -20,14 +20,14 @@ export const createChannel = protectedProcedure
   .input(createChannelInputSchema)
   .output(createChannelOutputSchema)
   .handler(async ({ input, context }) => {
-    const { channelType, chatId } = input;
+    const { channelType, chatId, language } = input;
 
     const [row] = await db
       .insert(alertChannels)
       .values({
         userId: context.user.id,
         channelType,
-        config: { chatId },
+        config: language ? { chatId, language } : { chatId },
         enabled: true,
       })
       .onConflictDoNothing({

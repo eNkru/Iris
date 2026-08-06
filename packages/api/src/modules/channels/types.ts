@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { channelTypeZodSchema } from "@iris/utils";
+import { channelTypeZodSchema, languageZodSchema } from "@iris/utils";
 import { okResultSchema } from "../shared";
 
 /**
@@ -14,6 +14,8 @@ export const createChannelInputSchema = z.object({
   channelType: z.literal("telegram"),
   /** Telegram chat id — digits only. Stored in `alert_channels.config.chatId`. */
   chatId: z.string().regex(/^\d+$/, "chatId must be a string of digits"),
+  /** Notification message language, stored in `alert_channels.config.language`. Defaults to `en`. */
+  language: languageZodSchema.optional(),
 });
 export type CreateChannelInput = z.infer<typeof createChannelInputSchema>;
 
@@ -21,6 +23,8 @@ export const updateChannelInputSchema = z.object({
   id: z.string().uuid(),
   enabled: z.boolean().optional(),
   chatId: z.string().regex(/^\d+$/, "chatId must be a string of digits").optional(),
+  /** Notification message language; when omitted the stored value is preserved. */
+  language: languageZodSchema.optional(),
 });
 export type UpdateChannelInput = z.infer<typeof updateChannelInputSchema>;
 

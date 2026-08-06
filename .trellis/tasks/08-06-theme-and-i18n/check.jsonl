@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/notifications-telegram.md", "reason": "Verify formatPriceAlertMessage/formatProductSummaryMessage signatures stay correct with the new lang param and HTML escaping still applies."}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Pre-commit checks: no any, translated components use semantic HTML, ARIA, no console.log, dark variants so no surface is unreadable in either mode."}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Backend pre-commit checks for the channels schema/language config changes; structured logging retained."}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Cross-package consistency for the shared Language enum and no regressions from signature changes."}

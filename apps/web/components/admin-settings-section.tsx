@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useGlobalSettings, useUpdateGlobalSettings } from "../hooks/use-settings";
+import { useI18n } from "../lib/i18n";
 import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
 
 /**
@@ -11,6 +12,7 @@ import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
  * submitting an empty value leaves the stored secret unchanged.
  */
 export function AdminSettingsSection() {
+  const { t } = useI18n();
   const { data, isLoading, isError, error } = useGlobalSettings();
   const updateGlobalSettings = useUpdateGlobalSettings();
 
@@ -50,14 +52,14 @@ export function AdminSettingsSection() {
 
     const parsedInterval = Number(pollInterval);
     if (!Number.isInteger(parsedInterval) || parsedInterval < 1) {
-      setErrorMessage("Poll interval must be a whole number of minutes.");
+      setErrorMessage(t("adminSettings.intervalInvalid"));
       return;
     }
 
     try {
       new URL(aiBaseUrl);
     } catch {
-      setErrorMessage("AI base URL must be a valid URL (e.g. https://api.openai.com/v1).");
+      setErrorMessage(t("adminSettings.aiBaseUrlInvalid"));
       return;
     }
 
@@ -73,29 +75,31 @@ export function AdminSettingsSection() {
       setBotToken("");
       setSavedAt(Date.now());
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to save global settings.");
+      setErrorMessage(
+        err instanceof Error ? err.message : t("adminSettings.saveError"),
+      );
     }
   };
 
   return (
     <div className="space-y-4">
-      {isLoading ? <Spinner label="Loading global settings…" /> : null}
+      {isLoading ? <Spinner label={t("adminSettings.loading")} /> : null}
       {isError ? (
         <ErrorBox
           message={
-            error instanceof Error ? error.message : "Failed to load global settings."
+            error instanceof Error ? error.message : t("adminSettings.loadError")
           }
         />
       ) : null}
       {!isLoading && !isError ? (
         <form onSubmit={onSubmit} className="max-w-md space-y-3">
           <div>
-            <Label htmlFor="ai-base-url">AI base URL</Label>
+            <Label htmlFor="ai-base-url">{t("adminSettings.aiBaseUrlLabel")}</Label>
             <Input
               id="ai-base-url"
               type="url"
               required
-              placeholder="https://api.openai.com/v1"
+              placeholder={t("adminSettings.aiBaseUrlPlaceholder")}
               value={aiBaseUrl}
               onChange={(e) => {
                 setSavedAt(null);
@@ -103,19 +107,18 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              Any OpenAI-compatible endpoint (OpenAI, OpenRouter, OpenCode Zen,
-              a local Llama/Ollama server, etc.).
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.aiBaseUrlHint")}
             </p>
           </div>
 
           <div>
-            <Label htmlFor="ai-api-key">AI API key</Label>
+            <Label htmlFor="ai-api-key">{t("adminSettings.aiApiKeyLabel")}</Label>
             <Input
               id="ai-api-key"
               type="password"
               autoComplete="off"
-              placeholder="Leave empty to keep the stored key"
+              placeholder={t("adminSettings.aiApiKeyPlaceholder")}
               value={aiApiKey}
               onChange={(e) => {
                 setSavedAt(null);
@@ -123,20 +126,20 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               {data?.settings.aiApiKey
-                ? `Stored key: ${data.settings.aiApiKey}`
-                : "No key stored."}
+                ? t("adminSettings.aiApiKeyStored", { key: data.settings.aiApiKey })
+                : t("adminSettings.aiApiKeyNone")}
             </p>
           </div>
 
           <div>
-            <Label htmlFor="ai-model">AI model</Label>
+            <Label htmlFor="ai-model">{t("adminSettings.aiModelLabel")}</Label>
             <Input
               id="ai-model"
               type="text"
               required
-              placeholder="e.g. gpt-4o-mini, deepseek-v4-flash-free, llama3.1"
+              placeholder={t("adminSettings.aiModelPlaceholder")}
               value={aiModel}
               onChange={(e) => {
                 setSavedAt(null);
@@ -144,13 +147,15 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              Must support tool calling (the model fetches the product page itself).
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.aiModelHint")}
             </p>
           </div>
 
           <div>
-            <Label htmlFor="global-interval">Default poll interval (minutes)</Label>
+            <Label htmlFor="global-interval">
+              {t("adminSettings.intervalLabel")}
+            </Label>
             <Input
               id="global-interval"
               type="number"
@@ -164,18 +169,18 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              Instance default; users and products can override it.
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.intervalHint")}
             </p>
           </div>
 
           <div>
-            <Label htmlFor="bot-token">Telegram bot token</Label>
+            <Label htmlFor="bot-token">{t("adminSettings.botTokenLabel")}</Label>
             <Input
               id="bot-token"
               type="password"
               autoComplete="off"
-              placeholder="Leave empty to keep the stored token"
+              placeholder={t("adminSettings.botTokenPlaceholder")}
               value={botToken}
               onChange={(e) => {
                 setSavedAt(null);
@@ -183,19 +188,27 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               {data?.settings.telegramBotToken
-                ? `Stored token: ${data.settings.telegramBotToken}`
-                : "No token stored."}
+                ? t("adminSettings.botTokenStored", {
+                    token: data.settings.telegramBotToken,
+                  })
+                : t("adminSettings.botTokenNone")}
             </p>
           </div>
 
           {errorMessage ? <ErrorBox message={errorMessage} /> : null}
           {savedAt !== null ? (
-            <p className="text-sm text-emerald-700">Saved.</p>
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">
+              {t("adminSettings.saved")}
+            </p>
           ) : null}
           <Button type="submit" disabled={updateGlobalSettings.isPending}>
-            {updateGlobalSettings.isPending ? <Spinner label="Saving…" /> : "Save global settings"}
+            {updateGlobalSettings.isPending ? (
+              <Spinner label={t("adminSettings.saving")} />
+            ) : (
+              t("adminSettings.submit")
+            )}
           </Button>
         </form>
       ) : null}

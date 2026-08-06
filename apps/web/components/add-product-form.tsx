@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useCreateProduct } from "../hooks/use-products";
+import { useI18n } from "../lib/i18n";
 import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
 
 /**
@@ -9,6 +10,7 @@ import { Button, ErrorBox, Input, Label, Spinner } from "./ui";
  * the server, and reports the resulting price (AC2).
  */
 export function AddProductForm() {
+  const { t } = useI18n();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const createProduct = useCreateProduct();
@@ -18,7 +20,7 @@ export function AddProductForm() {
     setError(null);
 
     if (!url.trim()) {
-      setError("Please enter a product URL.");
+      setError(t("addProduct.empty"));
       return;
     }
 
@@ -28,26 +30,26 @@ export function AddProductForm() {
       if (result.check.status === "changed" || result.check.status === "unchanged") {
         setUrl("");
       } else if (result.check.status === "unavailable") {
-        setError("The page was reached but no price could be extracted.");
+        setError(t("addProduct.unavailable"));
       } else if (result.check.status === "failed") {
-        setError(result.check.reason || "The price check failed.");
+        setError(result.check.reason || t("addProduct.failed"));
       } else if (result.check.status === "not_found") {
-        setError("The page could not be fetched.");
+        setError(t("addProduct.notFound"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add product.");
+      setError(err instanceof Error ? err.message : t("addProduct.error"));
     }
   };
 
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div>
-        <Label htmlFor="product-url">Product URL</Label>
+        <Label htmlFor="product-url">{t("addProduct.label")}</Label>
         <Input
           id="product-url"
           type="url"
           required
-          placeholder="https://shop.example.com/product/123"
+          placeholder={t("addProduct.placeholder")}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={createProduct.isPending}
@@ -56,23 +58,26 @@ export function AddProductForm() {
 
       {error ? <ErrorBox message={error} /> : null}
       {createProduct.data?.check.status === "changed" ? (
-        <p className="text-sm text-emerald-700">
-          Added — current price{" "}
-          <strong>
-            {createProduct.data.check.currency} {createProduct.data.check.newPrice.toFixed(2)}
-          </strong>
-          {" "}is now tracked.
+        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+          {t("addProduct.addedChanged", {
+            price: `${createProduct.data.check.currency} ${createProduct.data.check.newPrice.toFixed(2)}`,
+          })}
         </p>
       ) : null}
       {createProduct.data?.check.status === "unchanged" ? (
-        <p className="text-sm text-slate-600">
-          Added — current price is{" "}
-          <strong>{createProduct.data.check.price.toFixed(2)}</strong>.
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          {t("addProduct.addedUnchanged", {
+            price: createProduct.data.check.price.toFixed(2),
+          })}
         </p>
       ) : null}
 
       <Button type="submit" disabled={createProduct.isPending}>
-        {createProduct.isPending ? <Spinner label="Checking…" /> : "Add product"}
+        {createProduct.isPending ? (
+          <Spinner label={t("addProduct.checking")} />
+        ) : (
+          t("addProduct.submit")
+        )}
       </Button>
     </form>
   );
