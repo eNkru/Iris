@@ -281,3 +281,36 @@ Added class-based dark/light theme and en/zh UI + notification localization. The
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Camoufox sidecar diagnostic logging
+
+**Date**: 2026-08-07
+**Task**: Camoufox sidecar diagnostic logging
+**Branch**: `camoufox-sidecar-diagnose`
+
+### Summary
+
+Added structured diagnostic logging to camoufox/server.py to capture the real page.goto failure when the shared browser degrades after hours of uptime: qualified exception class name (error_type) on every failure path, previously-silent response-is-None path now logged, module-level consecutive-failure counter with reset-on-success, and one rich 'browser degraded' summary (repr+traceback) at DIAGNOSE_THRESHOLD=3. Logging-only — no recreation/lock/teardown (self-heal task's scope); /v1/fetch and /health responses byte-identical. Spec updated in backend/performance.md.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7b3752b` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
