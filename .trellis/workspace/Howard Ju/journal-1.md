@@ -244,3 +244,40 @@ Added a "Send summary to Telegram" button to the Products page that dispatches a
 ### Next Steps
 
 - Dark/light mode + multi-language (en/zh) — new task.
+
+
+---
+
+## Session: Dark/light mode + en/zh internationalization
+
+**Date**: 2026-08-06
+**Task**: 08-06-theme-and-i18n
+**Branch**: `main`
+
+### Summary
+
+Added class-based dark/light theme and en/zh UI + notification localization. Theme: `ThemeProvider`/`useTheme` (localStorage `iris.theme`, `.dark` class toggled on `<html>`, follows OS `prefers-color-scheme` when no stored choice, live OS changes) + `ThemeToggle` segmented control. i18n: dependency-free typed dictionaries in `lib/dictionary.ts` (`type Lang = "en" | "zh"`, `DictKey` derived from the `en` dict so a missing `zh` key is a compile-time error), `t(lang, key, vars?)` interpolation, client `LanguageProvider`/`useI18n` (localStorage `iris.lang` + `iris.lang` cookie), server `getLang()` cookie helper, `<html lang>` set. Localized app nav, pages, forms, lists, and settings sections. Backend: `formatPriceAlertMessage`/`formatProductSummaryMessage`/`formatRelativeTime` now take `lang: Language = "en"`; `sendProductSummary` groups channels by `alert_channels.config.language`, building one message per language and sending via `Promise.all` (no await-in-loop); channel create/update validate optional `language` via `languageZodSchema` (`LANGUAGE_VALUES = ["en","zh"]` in `@iris/utils`). Chart colors moved to `--chart-*` CSS variables defined in `:root` + `.dark` so Recharts stays visible in dark mode. Dispatched implement + check sub-agents. All typecheck/lint/build green.
+
+### Main Changes
+
+- Frontend: theme.tsx, i18n.tsx, dictionary.ts, theme-toggle.tsx, language-toggle.tsx, app/lib/get-lang.ts, providers wiring.
+- Backend: localized formatters + per-language summary batching, channels create/update `language` validation.
+- Spec: updated `.trellis/spec/backend/notifications-telegram.md` (lang contracts, batching, backward-compatible default), `.trellis/spec/frontend/state-management.md` (i18n context convention), `.trellis/spec/frontend/css-layout.md` (dark-mode vars + chart vars), index descriptions.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b79fe57` | feat(web,prices): add dark mode and en/zh i18n |
+
+### Testing
+
+- `pnpm --filter @iris/prices|api|utils|web typecheck` pass; `pnpm lint` (6 projects) pass; `pnpm build` pass.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
