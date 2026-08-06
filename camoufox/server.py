@@ -61,6 +61,13 @@ SIDECAR_CONCURRENCY = 5
 # (45 s) so the sidecar fails before the app's HTTP timeout fires.
 FETCH_TIMEOUT_SECONDS = 45.0
 
+# Diagnostic threshold for shared-browser degradation (R5). Aligned with the
+# self-heal task's intended `HEAL_THRESHOLD` (3) so the rich "browser degraded"
+# summary fires at the same point a future self-heal would trigger — making the
+# logs directly comparable. This is LOGGING-ONLY here: no recreation, no lock,
+# no teardown (that is the self-heal task's scope).
+DIAGNOSE_THRESHOLD = 3
+
 _semaphore: asyncio.Semaphore | None = None
 # `AsyncCamoufox` is the async context-manager client. Entering it yields a
 # Playwright `Browser` which exposes `new_page()` / `new_context()`; the
@@ -69,6 +76,86 @@ _semaphore: asyncio.Semaphore | None = None
 # yielded browser.
 _camoufox_ctx: AsyncCamoufox | None = None
 _browser: Browser | None = None
+# Consecutive-fetch-failure counter for the shared browser (R4). Incremented on
+# any failure (`goto` exception, `goto` timeout, `response is None`,
+# `new_page()` failure) and reset to 0 on any successful fetch. Surfaced in
+# each failure log line so degradation reads as a trend, not isolated
+# per-request warnings. Logging-only: it never drives a browser action.
+_consecutive_failures: int = 0
+
+
+def _record_success() -> None:
+    """Reset the consecutive-failure counter on a successful fetch (R4).
+
+    A single success clears the degradation trend — the same reset semantics
+    the future self-heal task will use for its trigger.
+    """
+    global _consecutive_failures
+    _consecutive_failures = 0
+
+
+def _record_failure(url: str, exc: BaseException | None, *, kind: str) -> None:
+    """Count and log a fetch failure with diagnostic detail (R1, R3–R5).
+
+    `kind` is a short category label ("timeout" | "error" | "no_response")
+    so the no-response path (which has no exception object) is still
+    accounted. Emits the per-request type+message line on every failure and,
+    exactly once when the count crosses `DIAGNOSE_THRESHOLD`, a richer
+    "browser degraded" summary with `repr`/traceback to capture root cause.
+    The rich line is not re-emitted until the counter resets (R5).
+    """
+    global _consecutive_failures
+    _consecutive_failures += 1
+    count = _consecutive_failures
+    error_type = _exc_type_name(exc) if exc is not None else kind
+    message = str(exc) if exc is not None else "page.goto returned no response"
+    logger.warning(
+        "sidecar fetch %s", kind,
+        extra={
+            "url": url,
+            "error": message,
+            "error_type": error_type,
+            "consecutive_failures": count,
+        },
+    )
+    if count == DIAGNOSE_THRESHOLD and exc is not None:
+        logger.warning(
+            "sidecar browser degraded — %d consecutive failures (root cause "
+            "detail below)", count,
+            extra={
+                "url": url,
+                "error_type": error_type,
+                "error": message,
+                "traceback": _traceback_repr(exc),
+            },
+        )
+
+
+def _exc_type_name(exc: BaseException) -> str:
+    """Qualified exception class name for diagnostic logging (R1).
+
+    Playwright failures raise `playwright.async_api.Error` subclasses; logging
+    only `str(exc)` (the pre-change behavior) loses the category. The qualified
+    name makes a transport-level `page.goto` failure distinguishable from an
+    unexpected `Exception` when the shared browser degrades after hours of
+    uptime.
+    """
+    cls = type(exc)
+    module = getattr(cls, "__module__", "") or ""
+    qualname = getattr(cls, "__qualname__", cls.__name__)
+    return f"{module}.{qualname}" if module else qualname
+
+
+def _traceback_repr(exc: BaseException) -> str:
+    """Compact `repr(exc)` + traceback for the threshold diagnostic line (R5).
+
+    Kept off the per-request path to avoid traceback spam on routine transient
+    timeouts; emitted only when consecutive failures cross the diagnostic
+    threshold.
+    """
+    import traceback
+
+    return repr(exc) + "\n" + "".join(traceback.format_exception(exc))
 
 
 class FetchRequest(BaseModel):
@@ -148,6 +235,12 @@ async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
                     timeout=int(FETCH_TIMEOUT_SECONDS * 1000),
                 )
                 if response is None:
+                    # R3: this path was previously silent. `page.goto` returns
+                    # None for navigations cancelled or redirected before a
+                    # response; account it as a fetch failure so a degraded
+                    # browser that only ever yields None is no longer
+                    # invisible in logs.
+                    _record_failure(request.url, None, kind="no_response")
                     return FetchResponseFail(reason="fetch_failed")
 
                 # Always return the rendered HTML when navigation produced a
@@ -171,17 +264,16 @@ async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
                             "html_len": len(html),
                         },
                     )
+                # A response with content counts as success for the degradation
+                # trend (R4): non-2xx challenge/deny pages are a per-site
+                # signal, not a shared-browser-degradation signal.
+                _record_success()
                 return FetchResponseOk(html=html, url=final_url)
             finally:
                 await page.close()
-        except asyncio.TimeoutError:
-            logger.warning(
-                "sidecar fetch timeout", extra={"url": request.url}
-            )
+        except asyncio.TimeoutError as exc:
+            _record_failure(request.url, exc, kind="timeout")
             return FetchResponseFail(reason="fetch_failed")
         except Exception as exc:  # noqa: BLE001 — never throw to the caller
-            logger.warning(
-                "sidecar fetch error",
-                extra={"url": request.url, "error": str(exc)},
-            )
+            _record_failure(request.url, exc, kind="error")
             return FetchResponseFail(reason="fetch_failed")

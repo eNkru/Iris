@@ -622,6 +622,120 @@ The sidecar is a separate Compose service (`camoufox/`):
   so a slow sidecar start does not block the app from serving) and gets
   `CAMOUFOX_SIDECAR_URL=http://camoufox:8000`.
 
+### Pattern: sidecar failure logging and degradation diagnostics
+
+The sidecar (`camoufox/server.py`) is the single fetch transport, so a silent
+shared-browser degradation is the worst-case failure mode: every retailer
+returns `{ok:false, reason:"fetch_failed"}` and the app can only surface the
+generic "Page fetch failed". Observed 2026-08-06 — after ~3 h of uptime the
+shared `AsyncCamoufox` browser silently degraded and every `page.goto` raised.
+The pre-fix code logged only `str(exc)` (no exception class) and the
+`response is None` path logged nothing, so the root cause was invisible.
+
+**Contract (code-spec)**: every failure path in `POST /v1/fetch` records a
+structured WARNING with `error_type` (qualified exception class name) + `error`
+(message) + `consecutive_failures` (running count), and exactly one richer
+"browser degraded" summary at the threshold. The counter and threshold are
+LOGGING-ONLY — no browser recreation, no `asyncio.Lock`, no teardown here
+(that is the self-heal task's scope; this diagnostic fires at the same point
+a future self-heal would trigger, so the logs map 1:1).
+
+```python
+# camoufox/server.py
+DIAGNOSE_THRESHOLD = 3  # aligned with the self-heal task's HEAL_THRESHOLD
+_consecutive_failures: int = 0  # module-level; logging-only
+
+def _exc_type_name(exc: BaseException) -> str:
+    cls = type(exc)
+    module = getattr(cls, "__module__", "") or ""
+    qualname = getattr(cls, "__qualname__", cls.__name__)
+    return f"{module}.{qualname}" if module else qualname
+
+def _record_failure(url: str, exc: BaseException | None, *, kind: str) -> None:
+    # kind ∈ {"timeout", "error", "no_response"}; no_response has no exc object
+    global _consecutive_failures
+    _consecutive_failures += 1
+    logger.warning("sidecar fetch %s", kind, extra={
+        "url": url,
+        "error": str(exc) if exc else "page.goto returned no response",
+        "error_type": _exc_type_name(exc) if exc else kind,
+        "consecutive_failures": _consecutive_failures,
+    })
+    # Rich summary (repr + traceback) fires ONCE at the threshold, not on
+    # every transient timeout; suppressed for no_response (no exc to dump).
+    if _consecutive_failures == DIAGNOSE_THRESHOLD and exc is not None:
+        logger.warning("sidecar browser degraded — …", extra={..., "traceback": ...})
+
+def _record_success() -> None:
+    global _consecutive_failures
+    _consecutive_failures = 0  # any successful fetch clears the trend
+```
+
+Handler routing (all paths return the SAME response bodies — no API change):
+
+```python
+# /v1/fetch
+if response is None:
+    _record_failure(request.url, None, kind="no_response")  # R3: was silent
+    return FetchResponseFail(reason="fetch_failed")
+# ... response.ok path ...
+_record_success()  # non-2xx challenge/deny pages are per-site, NOT degradation
+return FetchResponseOk(html=html, url=final_url)
+except asyncio.TimeoutError as exc:
+    _record_failure(request.url, exc, kind="timeout")
+    return FetchResponseFail(reason="fetch_failed")
+except Exception as exc:  # noqa: BLE001 — never throw to the caller
+    _record_failure(request.url, exc, kind="error")  # new_page()/goto failures
+    return FetchResponseFail(reason="fetch_failed")
+```
+
+**Validation & error matrix**
+
+| condition | log | response | counter |
+|---|---|---|---|
+| `response.ok` (incl. non-2xx challenge HTML) | (non-2xx WARNING only) | `FetchResponseOk` | reset → 0 |
+| `response is None` | WARNING `no_response` | `FetchResponseFail` | +1 |
+| `asyncio.TimeoutError` | WARNING `timeout` (+`error_type`) | `FetchResponseFail` | +1 |
+| any other `Exception` | WARNING `error` (+`error_type`) | `FetchResponseFail` | +1 |
+| count reaches `DIAGNOSE_THRESHOLD` (3) with exc | +1 rich "degraded" summary w/ traceback | (unchanged) | keeps counting |
+
+**Good/Base/Bad cases**
+
+- **Good**: 1 timeout then a success → counter resets to 0; no degraded line.
+- **Base**: 3 consecutive `goto` errors → exactly one "browser degraded" line with traceback; 4th failure logs per-request line only (no re-emit until reset).
+- **Bad (pre-fix)**: `response is None` silent; `error` logged as bare message with no class → root cause invisible after hours of uptime.
+
+**Tests required** (assertion points)
+
+- Per-request failure line carries `error_type` = qualified class name (e.g. `playwright.async_api.Error`), not just the message.
+- `response is None` emits a WARNING (previously silent).
+- Counter increments `1→2→3→4` across consecutive failures; `_record_success` resets to 0.
+- Exactly one "browser degraded" summary at count == 3; none at 4; none for `no_response` (exc is None).
+- `/v1/fetch` and `/health` responses byte-identical to pre-change for ok / non-2xx / timeout / error.
+- `git diff --stat` touches only `camoufox/server.py`.
+
+**Wrong vs Correct**
+
+```python
+# Wrong — bare message, silent no-response path, no trend
+except Exception as exc:  # noqa: BLE001
+    logger.warning("sidecar fetch error", extra={"url": request.url, "error": str(exc)})
+    return FetchResponseFail(reason="fetch_failed")
+# response is None → return FetchResponseFail(reason="fetch_failed")  # no log at all
+
+# Correct — type + message + counter; no-response accounted; threshold summary
+except Exception as exc:  # noqa: BLE001
+    _record_failure(request.url, exc, kind="error")
+    return FetchResponseFail(reason="fetch_failed")
+```
+
+**Gotcha**: the sidecar runs Python stdlib `logging`, NOT the app's TS
+`@iris/utils` logger. The backend `logging.md` `console.log` ban and TS logger
+API do not apply here — match the existing `logger.warning(..., extra={...})`
+style in `server.py`. Deps (fastapi/playwright/camoufox) exist only in the
+container image; host-side unit tests must stub them to exercise the pure
+`_record_failure` / `_record_success` / `_exc_type_name` helpers.
+
 ### Local dev
 
 `pnpm dev` requires the sidecar. Run `docker compose up camoufox` (or a local
