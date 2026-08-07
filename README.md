@@ -104,6 +104,10 @@ Copy `.env.example` to `.env` and adjust. The important ones:
 | `SCHEDULER_LOCK_TTL_SECONDS` | Redis lock TTL so concurrent replicas don't double-process (default 60 s) |
 | `CAMOUFOX_SIDECAR_URL` | Camoufox sidecar URL (required). `http://localhost:8000` for `pnpm dev`, `http://camoufox:8000` inside Compose |
 
+## Special Thanks
+
+Special thanks to [LINUX DO](https://linux.do).
+
 ## License
 
 [GPL-3.0](LICENSE)
