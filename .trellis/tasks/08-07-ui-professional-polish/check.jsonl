@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/components.md", "reason": "Verify semantic links/buttons and client boundary discipline in new chrome"}
+{"file": ".trellis/spec/frontend/css-layout.md", "reason": "Verify flex shell, sticky header, dark-mode token usage"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Quality checklist before calling the redesign done"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Dictionary key parity and no any/ts-expect-error in new UI code"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "i18n keys present for en+zh chrome strings"}

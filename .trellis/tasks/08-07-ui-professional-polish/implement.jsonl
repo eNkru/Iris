@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/components.md", "reason": "Server/client split, semantic HTML, button/link patterns for shell and footer"}
+{"file": ".trellis/spec/frontend/css-layout.md", "reason": "Flex column shell, sticky header, min-h patterns, dark mode CSS vars"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "i18n dictionary/lang context when adding footer and chrome strings"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Pre-commit quality bar for UI changes"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where to place new shell/footer/link modules under apps/web"}

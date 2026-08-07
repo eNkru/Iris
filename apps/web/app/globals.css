@@ -3,18 +3,37 @@
 /* Class-based dark mode (Tailwind v4): `.dark` on <html>, toggled by ThemeProvider. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Theme-aware SVG colors for the Recharts price chart (SVG `stroke` can't take
-   Tailwind utilities directly, so a dependency-free CSS variable is used). */
+/*
+ * Design tokens for the professional shell (restrained slate + cool accent).
+ * Chart SVG colors still need CSS vars because Recharts stroke can't take
+ * Tailwind utilities directly.
+ */
 :root {
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-fg: #ffffff;
+  --accent-muted: #eef2ff;
+  --accent-ring: #6366f1;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --border-subtle: #e2e8f0;
   --chart-grid: #e2e8f0;
   --chart-axis: #94a3b8;
-  --chart-line: #0f172a;
-  --chart-dot: #0f172a;
+  --chart-line: #4f46e5;
+  --chart-dot: #4f46e5;
 }
 
 .dark {
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-fg: #0f172a;
+  --accent-muted: #1e1b4b;
+  --accent-ring: #818cf8;
+  --surface: #0f172a;
+  --surface-muted: #020617;
+  --border-subtle: #1e293b;
   --chart-grid: #1e293b;
   --chart-axis: #64748b;
-  --chart-line: #94a3b8;
-  --chart-dot: #e2e8f0;
+  --chart-line: #a5b4fc;
+  --chart-dot: #e0e7ff;
 }

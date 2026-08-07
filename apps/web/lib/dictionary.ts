@@ -13,7 +13,11 @@ export const LANG_STORAGE_KEY = "iris.lang";
 export const LANG_COOKIE_NAME = "iris.lang";
 
 const en = {
+  // Brand
+  "brand.name": "Iris",
+
   // App nav
+  "nav.main": "Main",
   "nav.products": "Products",
   "nav.settings": "Settings",
   "nav.signOut": "Sign out",
@@ -23,10 +27,17 @@ const en = {
   "nav.language.en": "English",
   "nav.language.zh": "中文",
 
+  // Footer / project links
+  "footer.navLabel": "Project links",
+  "footer.tagline": "Self-hosted price tracking & alerts.",
+  "footer.repo": "Repository",
+  "footer.issues": "Issues",
+
   // Home page
   "home.title": "Products",
   "home.intro": "Add a product URL to start tracking its price. The first check runs immediately.",
   "home.tracked": "Tracked products",
+  "home.addSection": "Add a product",
 
   // Add product form
   "addProduct.label": "Product URL",
@@ -45,6 +56,8 @@ const en = {
   "productList.loading": "Loading products…",
   "productList.loadError": "Failed to load products.",
   "productList.empty": "No products yet — add your first product URL above.",
+  "productList.emptyTitle": "Nothing tracked yet",
+  "productList.active": "Active",
   "productList.paused": "Paused",
   "productList.noPrice": "No price recorded yet",
   "productList.checked": " · checked ",
@@ -177,6 +190,7 @@ const en = {
   "login.sendLink": "Send login link",
   "login.brand": "Iris",
   "login.tagline": "Price tracking & alerts. Enter your email and we'll send you a sign-in link.",
+  "login.projectLinks": "Open source on GitHub",
 
   // Settings page
   "settings.title": "Settings",
@@ -211,7 +225,11 @@ export type DictKey = keyof typeof en;
 type Dictionary = Record<DictKey, string>;
 
 const zh: Dictionary = {
+  // Brand
+  "brand.name": "Iris",
+
   // App nav
+  "nav.main": "主导航",
   "nav.products": "商品",
   "nav.settings": "设置",
   "nav.signOut": "退出登录",
@@ -221,10 +239,17 @@ const zh: Dictionary = {
   "nav.language.en": "English",
   "nav.language.zh": "中文",
 
+  // Footer / project links
+  "footer.navLabel": "项目链接",
+  "footer.tagline": "自托管的价格追踪与提醒。",
+  "footer.repo": "代码仓库",
+  "footer.issues": "问题反馈",
+
   // Home page
   "home.title": "商品",
   "home.intro": "添加商品链接即可开始追踪价格，首次检查会立即执行。",
   "home.tracked": "追踪中的商品",
+  "home.addSection": "添加商品",
 
   // Add product form
   "addProduct.label": "商品链接",
@@ -243,6 +268,8 @@ const zh: Dictionary = {
   "productList.loading": "正在加载商品…",
   "productList.loadError": "加载商品失败。",
   "productList.empty": "还没有商品 — 先在上方添加第一个商品链接。",
+  "productList.emptyTitle": "还没有追踪中的商品",
+  "productList.active": "活跃",
   "productList.paused": "已暂停",
   "productList.noPrice": "暂无价格记录",
   "productList.checked": " · 检查于 ",
@@ -375,6 +402,7 @@ const zh: Dictionary = {
   "login.sendLink": "发送登录链接",
   "login.brand": "Iris",
   "login.tagline": "价格追踪与提醒。输入你的邮箱，我们会发送一条登录链接。",
+  "login.projectLinks": "在 GitHub 上开源",
 
   // Settings page
   "settings.title": "设置",

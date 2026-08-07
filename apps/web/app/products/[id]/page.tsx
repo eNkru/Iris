@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useCheckNow, useProduct } from "../../../hooks/use-products";
-import { AppNav } from "../../../components/app-nav";
+import { AppShell } from "../../../components/app-shell";
 import { AuthGate } from "../../../components/auth-gate";
 import { PriceChart } from "../../../components/price-chart";
 import { ProductEditForm } from "../../../components/product-edit-form";
 import { useI18n } from "../../../lib/i18n";
 import {
+  Badge,
   ButtonSecondary,
   Card,
   ErrorBox,
@@ -29,33 +30,33 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen">
-        <AppNav />
-        <main className="mx-auto max-w-5xl px-6 py-8">
+      <AuthGate>
+        <AppShell>
           <Spinner label={t("detail.loading")} />
-        </main>
-      </div>
+        </AppShell>
+      </AuthGate>
     );
   }
 
   if (isError || !data) {
     return (
-      <div className="min-h-screen">
-        <AppNav />
-        <main className="mx-auto max-w-5xl px-6 py-8">
+      <AuthGate>
+        <AppShell>
           <ErrorBox
-            message={error instanceof Error ? error.message : t("detail.loadError")}
+            message={
+              error instanceof Error ? error.message : t("detail.loadError")
+            }
           />
           <div className="mt-4">
             <Link
               href="/"
-              className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              className="text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
             >
               {t("detail.back")}
             </Link>
           </div>
-        </main>
-      </div>
+        </AppShell>
+      </AuthGate>
     );
   }
 
@@ -63,23 +64,34 @@ export default function ProductDetailPage() {
 
   return (
     <AuthGate>
-      <div className="min-h-screen">
-      <AppNav />
-      <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        <div>
+      <AppShell mainClassName="space-y-6">
+        <div className="space-y-3">
           <Link
             href="/"
-            className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            className="inline-flex text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
           >
             {t("detail.back")}
           </Link>
-          <h1 className="mt-2 truncate text-2xl font-semibold dark:text-slate-100" title={product.url}>
-            {product.name ?? product.url}
-          </h1>
-          <p className="truncate text-sm text-slate-400 dark:text-slate-500">{product.url}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <h1
+                className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                title={product.url}
+              >
+                {product.name ?? product.url}
+              </h1>
+              <p className="truncate text-sm text-slate-400 dark:text-slate-500">
+                {product.url}
+              </p>
+            </div>
+            <Badge tone={product.active ? "success" : "neutral"}>
+              {product.active ? t("detail.active") : t("detail.paused")}
+            </Badge>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
             {product.currentPrice != null ? (
-              <span>
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 {t("detail.currentPrice", {
                   price: formatPrice(product.currentPrice, product.currency),
                 })}
@@ -92,28 +104,27 @@ export default function ProductDetailPage() {
                 time: formatRelativeTime(product.lastCheckedAt),
               })}
             </span>
-            <span
-              className={
-                product.active
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-slate-400 dark:text-slate-500"
-              }
-            >
-              {product.active ? t("detail.active") : t("detail.paused")}
-            </span>
           </div>
-          <div className="mt-3">
+
+          <div className="pt-1">
             <ButtonSecondary
               onClick={() => {
                 setCheckError(null);
                 checkNow.reset();
-                checkNow.mutate({ id: product.id }, {
-                  onError: (err) => setCheckError(err.message),
-                });
+                checkNow.mutate(
+                  { id: product.id },
+                  {
+                    onError: (err) => setCheckError(err.message),
+                  },
+                );
               }}
               disabled={checkNow.isPending}
             >
-              {checkNow.isPending ? <Spinner label={t("detail.checking")} /> : t("detail.checkNow")}
+              {checkNow.isPending ? (
+                <Spinner label={t("detail.checking")} />
+              ) : (
+                t("detail.checkNow")
+              )}
             </ButtonSecondary>
             {checkError ? (
               <div className="mt-2">
@@ -128,14 +139,19 @@ export default function ProductDetailPage() {
                       ? `${formatPrice(checkNow.data.check.oldPrice, checkNow.data.check.currency)} → `
                       : ""
                   }${formatPrice(checkNow.data.check.newPrice, checkNow.data.check.currency)}`,
-                  alert: checkNow.data.check.alertDispatched ? t("detail.alertSent") : "",
+                  alert: checkNow.data.check.alertDispatched
+                    ? t("detail.alertSent")
+                    : "",
                 })}
               </p>
             ) : null}
             {checkNow.data?.check.status === "unchanged" ? (
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                 {t("detail.priceUnchanged", {
-                  price: formatPrice(checkNow.data.check.price, product.currency),
+                  price: formatPrice(
+                    checkNow.data.check.price,
+                    product.currency,
+                  ),
                 })}
               </p>
             ) : null}
@@ -146,23 +162,28 @@ export default function ProductDetailPage() {
             ) : null}
             {checkNow.data?.check.status === "failed" ? (
               <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {t("detail.checkFailed", { reason: checkNow.data.check.reason })}
+                {t("detail.checkFailed", {
+                  reason: checkNow.data.check.reason,
+                })}
               </p>
             ) : null}
           </div>
         </div>
 
         <Card>
-          <h2 className="mb-3 text-lg font-semibold">{t("detail.priceHistory")}</h2>
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            {t("detail.priceHistory")}
+          </h2>
           <PriceChart history={history} currency={product.currency} />
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-lg font-semibold">{t("detail.settings")}</h2>
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            {t("detail.settings")}
+          </h2>
           <ProductEditForm product={product} />
         </Card>
-      </main>
-      </div>
+      </AppShell>
     </AuthGate>
   );
 }
