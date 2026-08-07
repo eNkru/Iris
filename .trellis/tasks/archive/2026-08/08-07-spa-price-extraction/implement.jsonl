@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/performance.md", "reason": "Documents the sidecar fetch contract (goto domcontentloaded at ~line 618), the Shared Limiter Pattern, the anti-pattern guardrail against per-retailer branching (line 632), and the diagnostic logging contract — all constraints the render-wait change must respect."}
+{"file": ".trellis/spec/backend/logging.md", "reason": "Logging conventions; the sidecar uses Python stdlib logging (not the TS logger), and the change must keep the existing extra-field WARNING style and not introduce console.log-equivalent patterns."}

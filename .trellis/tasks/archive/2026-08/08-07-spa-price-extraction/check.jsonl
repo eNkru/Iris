@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/performance.md", "reason": "The acceptance criteria (no per-retailer branching, response shapes unchanged, /health unchanged, timeout/concurrency constants unchanged, diff scope = server.py + spec) map directly to contracts recorded here."}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Pre-commit quality checklist for backend code; used to verify the change before reporting completion."}

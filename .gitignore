@@ -32,3 +32,7 @@ pnpm-debug.log*
 .idea/
 .vscode/
 *.swp
+
+# Python (camoufox sidecar)
+__pycache__/
+*.py[cod]

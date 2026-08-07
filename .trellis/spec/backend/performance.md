@@ -615,12 +615,211 @@ The sidecar is a separate Compose service (`camoufox/`):
   deployments work.
 - `camoufox/server.py`: FastAPI app; lazy single `AsyncCamoufox` (headless)
   launched in the lifespan; asyncio semaphore (5); `POST /v1/fetch`; `GET
-  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); `content()`
-  + `page.url()`; stdlib logging; never throws to the caller.
+  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); then a
+  bounded SPA render wait (see Pattern below); `content()` + `page.url()`;
+  stdlib logging; never throws to the caller.
 - `docker-compose.yml`: `camoufox` service (internal network only,
   `restart: unless-stopped`); app `depends_on: camoufox` (soft — `service_started`,
   so a slow sidecar start does not block the app from serving) and gets
   `CAMOUFOX_SIDECAR_URL=http://camoufox:8000`.
+
+### Pattern: SPA render wait (post-domcontentloaded)
+
+Client-rendered SPA product pages (Angular/React/Next.js) inject their price
+via JavaScript *after* `domcontentloaded`. Snapshotting `page.content()` at
+that event yields an empty shell — `reducePageHtml` produces empty content,
+the AI reports `available:false`, and product create rolls back. Confirmed
+2026-08-07 on an Angular SPA PDP: body stripped-text length was **0** at
+`domcontentloaded`; the real product price (`$ 39 99`) appeared only after
+hydration (~5.8 s).
+
+**Why not `networkidle`?** Experiment against the live sidecar: after
+`domcontentloaded`, `wait_for_load_state("networkidle")` still returned 0 body
+text. The SPA reaches network idle before (or without) putting the price in
+the DOM. `networkidle` also penalizes every page (analytics/polling hang).
+
+**Chosen approach** — generic content-stabilization wait in
+`camoufox/server.py` after a successful `goto` and before `page.content()`:
+
+```python
+RENDER_WAIT_SECONDS = 8.0   # cap; well under FETCH_TIMEOUT_SECONDS (45)
+RENDER_MIN_TEXT_LEN = 200   # ignore chrome stubs (<200) so they don't "stabilize"
+RENDER_STABLE_SECONDS = 1.0 # return once body.innerText.length is unchanged this long
+
+async def _wait_for_render(page) -> None:
+    # Poll document.body.innerText.length every 100 ms.
+    # Lengths < RENDER_MIN_TEXT_LEN do NOT start the stability clock
+    # (SPA shells often render ~9 chars of chrome for ~2 s before real content).
+    # Once above the floor, return when length is stable for RENDER_STABLE_SECONDS
+    # OR when RENDER_WAIT_SECONDS elapses. Never raises — best-effort only.
+    ...
+```
+
+Handler placement (only on the success path; failure paths unchanged):
+
+```python
+response = await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+if response is None:
+    _record_failure(...); return FetchResponseFail(reason="fetch_failed")
+await _wait_for_render(page)   # NEW — bounded SPA wait
+html = await page.content()
+```
+
+**Contracts / constraints**
+
+| rule | detail |
+|---|---|
+| Generic | No retailer/host branching, no per-site selectors (anti-pattern below) |
+| Bounded | Cap = 8 s; never-rendering pages still fail inside the 45 s envelope |
+| Best-effort | `_wait_for_render` never raises; evaluate errors just end the wait |
+| Static pages | Text already present at `domcontentloaded` → stabilizes in ~1 s once above floor |
+| API | `/v1/fetch` and `/health` shapes unchanged; `FETCH_TIMEOUT_SECONDS` / `SIDECAR_CONCURRENCY` unchanged |
+| Diagnostics | Failure accounting from the diagnose task is intact (wait is on the success path only) |
+
+**Validation (assertion points)**
+
+- SPA PDP (e.g. woolworths productdetails): returned HTML has body text length
+  > 0 AND a price-bearing token; AI extraction yields `{available:true, price, …}`.
+- Static/server-rendered PDP still extracts; latency not unbounded.
+- No `woolworths` / hostname `if` in `camoufox/server.py` (comments naming the
+  experiment retailer are fine; code branches are not).
+- Diff touches `camoufox/server.py` (+ this spec section); no dependency changes.
+
+**Wrong vs Correct**
+
+```python
+# Wrong — snapshot at domcontentloaded (SPA shell is empty)
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+html = await page.content()  # body text len == 0 on Angular/React SPAs
+
+# Wrong — networkidle (experimentally still empty; penalizes every page)
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+await page.wait_for_load_state("networkidle")  # still 0 text on woolworths
+html = await page.content()
+
+# Wrong — per-retailer selector (anti-pattern)
+if "woolworths" in url:
+    await page.wait_for_selector("[data-testid=price]")
+
+# Correct — generic content-stabilization wait
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+await _wait_for_render(page)  # poll innerText length; floor + stable + cap
+html = await page.content()
+```
+
+### Pattern: sidecar failure logging and degradation diagnostics
+
+The sidecar (`camoufox/server.py`) is the single fetch transport, so a silent
+shared-browser degradation is the worst-case failure mode: every retailer
+returns `{ok:false, reason:"fetch_failed"}` and the app can only surface the
+generic "Page fetch failed". Observed 2026-08-06 — after ~3 h of uptime the
+shared `AsyncCamoufox` browser silently degraded and every `page.goto` raised.
+The pre-fix code logged only `str(exc)` (no exception class) and the
+`response is None` path logged nothing, so the root cause was invisible.
+
+**Contract (code-spec)**: every failure path in `POST /v1/fetch` records a
+structured WARNING with `error_type` (qualified exception class name) + `error`
+(message) + `consecutive_failures` (running count), and exactly one richer
+"browser degraded" summary at the threshold. The counter and threshold are
+LOGGING-ONLY — no browser recreation, no `asyncio.Lock`, no teardown here
+(that is the self-heal task's scope; this diagnostic fires at the same point
+a future self-heal would trigger, so the logs map 1:1).
+
+```python
+# camoufox/server.py
+DIAGNOSE_THRESHOLD = 3  # aligned with the self-heal task's HEAL_THRESHOLD
+_consecutive_failures: int = 0  # module-level; logging-only
+
+def _exc_type_name(exc: BaseException) -> str:
+    cls = type(exc)
+    module = getattr(cls, "__module__", "") or ""
+    qualname = getattr(cls, "__qualname__", cls.__name__)
+    return f"{module}.{qualname}" if module else qualname
+
+def _record_failure(url: str, exc: BaseException | None, *, kind: str) -> None:
+    # kind ∈ {"timeout", "error", "no_response"}; no_response has no exc object
+    global _consecutive_failures
+    _consecutive_failures += 1
+    logger.warning("sidecar fetch %s", kind, extra={
+        "url": url,
+        "error": str(exc) if exc else "page.goto returned no response",
+        "error_type": _exc_type_name(exc) if exc else kind,
+        "consecutive_failures": _consecutive_failures,
+    })
+    # Rich summary (repr + traceback) fires ONCE at the threshold, not on
+    # every transient timeout; suppressed for no_response (no exc to dump).
+    if _consecutive_failures == DIAGNOSE_THRESHOLD and exc is not None:
+        logger.warning("sidecar browser degraded — …", extra={..., "traceback": ...})
+
+def _record_success() -> None:
+    global _consecutive_failures
+    _consecutive_failures = 0  # any successful fetch clears the trend
+```
+
+Handler routing (all paths return the SAME response bodies — no API change):
+
+```python
+# /v1/fetch
+if response is None:
+    _record_failure(request.url, None, kind="no_response")  # R3: was silent
+    return FetchResponseFail(reason="fetch_failed")
+# ... response.ok path ...
+_record_success()  # non-2xx challenge/deny pages are per-site, NOT degradation
+return FetchResponseOk(html=html, url=final_url)
+except asyncio.TimeoutError as exc:
+    _record_failure(request.url, exc, kind="timeout")
+    return FetchResponseFail(reason="fetch_failed")
+except Exception as exc:  # noqa: BLE001 — never throw to the caller
+    _record_failure(request.url, exc, kind="error")  # new_page()/goto failures
+    return FetchResponseFail(reason="fetch_failed")
+```
+
+**Validation & error matrix**
+
+| condition | log | response | counter |
+|---|---|---|---|
+| `response.ok` (incl. non-2xx challenge HTML) | (non-2xx WARNING only) | `FetchResponseOk` | reset → 0 |
+| `response is None` | WARNING `no_response` | `FetchResponseFail` | +1 |
+| `asyncio.TimeoutError` | WARNING `timeout` (+`error_type`) | `FetchResponseFail` | +1 |
+| any other `Exception` | WARNING `error` (+`error_type`) | `FetchResponseFail` | +1 |
+| count reaches `DIAGNOSE_THRESHOLD` (3) with exc | +1 rich "degraded" summary w/ traceback | (unchanged) | keeps counting |
+
+**Good/Base/Bad cases**
+
+- **Good**: 1 timeout then a success → counter resets to 0; no degraded line.
+- **Base**: 3 consecutive `goto` errors → exactly one "browser degraded" line with traceback; 4th failure logs per-request line only (no re-emit until reset).
+- **Bad (pre-fix)**: `response is None` silent; `error` logged as bare message with no class → root cause invisible after hours of uptime.
+
+**Tests required** (assertion points)
+
+- Per-request failure line carries `error_type` = qualified class name (e.g. `playwright.async_api.Error`), not just the message.
+- `response is None` emits a WARNING (previously silent).
+- Counter increments `1→2→3→4` across consecutive failures; `_record_success` resets to 0.
+- Exactly one "browser degraded" summary at count == 3; none at 4; none for `no_response` (exc is None).
+- `/v1/fetch` and `/health` responses byte-identical to pre-change for ok / non-2xx / timeout / error.
+- `git diff --stat` touches only `camoufox/server.py`.
+
+**Wrong vs Correct**
+
+```python
+# Wrong — bare message, silent no-response path, no trend
+except Exception as exc:  # noqa: BLE001
+    logger.warning("sidecar fetch error", extra={"url": request.url, "error": str(exc)})
+    return FetchResponseFail(reason="fetch_failed")
+# response is None → return FetchResponseFail(reason="fetch_failed")  # no log at all
+
+# Correct — type + message + counter; no-response accounted; threshold summary
+except Exception as exc:  # noqa: BLE001
+    _record_failure(request.url, exc, kind="error")
+    return FetchResponseFail(reason="fetch_failed")
+```
+
+**Gotcha**: the sidecar runs Python stdlib `logging`, NOT the app's TS
+`@iris/utils` logger. The backend `logging.md` `console.log` ban and TS logger
+API do not apply here — match the existing `logger.warning(..., extra={...})`
+style in `server.py`. Deps (fastapi/playwright/camoufox) exist only in the
+container image; host-side unit tests must stub them to exercise the pure
+`_record_failure` / `_record_success` / `_exc_type_name` helpers.
 
 ### Local dev
 
