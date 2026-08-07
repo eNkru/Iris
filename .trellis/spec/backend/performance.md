@@ -615,12 +615,97 @@ The sidecar is a separate Compose service (`camoufox/`):
   deployments work.
 - `camoufox/server.py`: FastAPI app; lazy single `AsyncCamoufox` (headless)
   launched in the lifespan; asyncio semaphore (5); `POST /v1/fetch`; `GET
-  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); `content()`
-  + `page.url()`; stdlib logging; never throws to the caller.
+  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); then a
+  bounded SPA render wait (see Pattern below); `content()` + `page.url()`;
+  stdlib logging; never throws to the caller.
 - `docker-compose.yml`: `camoufox` service (internal network only,
   `restart: unless-stopped`); app `depends_on: camoufox` (soft — `service_started`,
   so a slow sidecar start does not block the app from serving) and gets
   `CAMOUFOX_SIDECAR_URL=http://camoufox:8000`.
+
+### Pattern: SPA render wait (post-domcontentloaded)
+
+Client-rendered SPA product pages (Angular/React/Next.js) inject their price
+via JavaScript *after* `domcontentloaded`. Snapshotting `page.content()` at
+that event yields an empty shell — `reducePageHtml` produces empty content,
+the AI reports `available:false`, and product create rolls back. Confirmed
+2026-08-07 on an Angular SPA PDP: body stripped-text length was **0** at
+`domcontentloaded`; the real product price (`$ 39 99`) appeared only after
+hydration (~5.8 s).
+
+**Why not `networkidle`?** Experiment against the live sidecar: after
+`domcontentloaded`, `wait_for_load_state("networkidle")` still returned 0 body
+text. The SPA reaches network idle before (or without) putting the price in
+the DOM. `networkidle` also penalizes every page (analytics/polling hang).
+
+**Chosen approach** — generic content-stabilization wait in
+`camoufox/server.py` after a successful `goto` and before `page.content()`:
+
+```python
+RENDER_WAIT_SECONDS = 8.0   # cap; well under FETCH_TIMEOUT_SECONDS (45)
+RENDER_MIN_TEXT_LEN = 200   # ignore chrome stubs (<200) so they don't "stabilize"
+RENDER_STABLE_SECONDS = 1.0 # return once body.innerText.length is unchanged this long
+
+async def _wait_for_render(page) -> None:
+    # Poll document.body.innerText.length every 100 ms.
+    # Lengths < RENDER_MIN_TEXT_LEN do NOT start the stability clock
+    # (SPA shells often render ~9 chars of chrome for ~2 s before real content).
+    # Once above the floor, return when length is stable for RENDER_STABLE_SECONDS
+    # OR when RENDER_WAIT_SECONDS elapses. Never raises — best-effort only.
+    ...
+```
+
+Handler placement (only on the success path; failure paths unchanged):
+
+```python
+response = await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+if response is None:
+    _record_failure(...); return FetchResponseFail(reason="fetch_failed")
+await _wait_for_render(page)   # NEW — bounded SPA wait
+html = await page.content()
+```
+
+**Contracts / constraints**
+
+| rule | detail |
+|---|---|
+| Generic | No retailer/host branching, no per-site selectors (anti-pattern below) |
+| Bounded | Cap = 8 s; never-rendering pages still fail inside the 45 s envelope |
+| Best-effort | `_wait_for_render` never raises; evaluate errors just end the wait |
+| Static pages | Text already present at `domcontentloaded` → stabilizes in ~1 s once above floor |
+| API | `/v1/fetch` and `/health` shapes unchanged; `FETCH_TIMEOUT_SECONDS` / `SIDECAR_CONCURRENCY` unchanged |
+| Diagnostics | Failure accounting from the diagnose task is intact (wait is on the success path only) |
+
+**Validation (assertion points)**
+
+- SPA PDP (e.g. woolworths productdetails): returned HTML has body text length
+  > 0 AND a price-bearing token; AI extraction yields `{available:true, price, …}`.
+- Static/server-rendered PDP still extracts; latency not unbounded.
+- No `woolworths` / hostname `if` in `camoufox/server.py` (comments naming the
+  experiment retailer are fine; code branches are not).
+- Diff touches `camoufox/server.py` (+ this spec section); no dependency changes.
+
+**Wrong vs Correct**
+
+```python
+# Wrong — snapshot at domcontentloaded (SPA shell is empty)
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+html = await page.content()  # body text len == 0 on Angular/React SPAs
+
+# Wrong — networkidle (experimentally still empty; penalizes every page)
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+await page.wait_for_load_state("networkidle")  # still 0 text on woolworths
+html = await page.content()
+
+# Wrong — per-retailer selector (anti-pattern)
+if "woolworths" in url:
+    await page.wait_for_selector("[data-testid=price]")
+
+# Correct — generic content-stabilization wait
+await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+await _wait_for_render(page)  # poll innerText length; floor + stable + cap
+html = await page.content()
+```
 
 ### Pattern: sidecar failure logging and degradation diagnostics
 

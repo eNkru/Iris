@@ -60,6 +60,22 @@ SIDECAR_CONCURRENCY = 5
 # Per-request navigation timeout. Matches the app-side AbortSignal.timeout
 # (45 s) so the sidecar fails before the app's HTTP timeout fires.
 FETCH_TIMEOUT_SECONDS = 45.0
+# Cap for the post-domcontentloaded SPA render wait (design.md §Chosen
+# approach). Polls body.innerText until the length stabilizes for ~1 s (or
+# this cap elapses). Bounded well under FETCH_TIMEOUT_SECONDS so a page that
+# never renders still fails inside the existing 45 s envelope. Experiment
+# (Angular SPA PDP): price rendered at ~5.8 s; 8 s is a safe ceiling.
+RENDER_WAIT_SECONDS = 8.0
+# Minimum body.innerText length before the stability clock starts. SPA shells
+# often render a tiny partial (e.g. 9 chars of chrome) for ~2 s before the
+# real content hydrates; without this floor the wait would "stabilize" on the
+# empty stub and miss the price. 200 is well above chrome stubs and well
+# below a real PDP (experiment: real content was 1930+ chars).
+RENDER_MIN_TEXT_LEN = 200
+# How long body.innerText.length must stay unchanged (once above the floor)
+# before we treat the page as rendered. 1 s is long enough to ride past a
+# mid-hydration flicker without waiting for the full cap on a static page.
+RENDER_STABLE_SECONDS = 1.0
 
 # Diagnostic threshold for shared-browser degradation (R5). Aligned with the
 # self-heal task's intended `HEAL_THRESHOLD` (3) so the rich "browser degraded"
@@ -158,6 +174,67 @@ def _traceback_repr(exc: BaseException) -> str:
     return repr(exc) + "\n" + "".join(traceback.format_exception(exc))
 
 
+async def _wait_for_render(page: object) -> None:
+    """Best-effort wait for SPA content to render after `domcontentloaded`.
+
+    Client-rendered SPAs (Angular/React/Next.js) inject their price via JS
+    *after* `domcontentloaded`. Snapshotting `page.content()` at that event
+    yields an empty shell — `reducePageHtml` produces empty content, the AI
+    reports `available:false`, and product create rolls back. Experiment
+    (Angular SPA PDP, 2026-08-07): `domcontentloaded` → 0 body text;
+    `networkidle` → still 0; content-stabilization wait → price present at
+    ~5.8 s. See design.md §Chosen approach.
+
+    Algorithm:
+      1. Poll `document.body.innerText.length` every 100 ms.
+      2. Ignore lengths below `RENDER_MIN_TEXT_LEN` (SPA chrome stubs of a
+         few chars must not "stabilize" the wait early).
+      3. Once above the floor, return when the length is unchanged for
+         `RENDER_STABLE_SECONDS`, or when `RENDER_WAIT_SECONDS` elapses.
+
+    Never raises: a failure to evaluate is treated as "no more waiting" so
+    the fetch still proceeds to `page.content()` and the existing failure
+    paths (timeout / exception) remain the only sources of `fetch_failed`.
+    Generic — no retailer/host branching, no per-site selectors (the
+    anti-pattern guardrail in backend/performance.md).
+    """
+    import time
+
+    deadline = time.monotonic() + RENDER_WAIT_SECONDS
+    last_len: int | None = None
+    stable_since: float | None = None
+    while time.monotonic() < deadline:
+        try:
+            # `page` is a Playwright Page; typed as object so the module does
+            # not hard-depend on the playwright type at import time for this
+            # helper's signature (the lifespan already holds a Browser).
+            current = await page.evaluate(  # type: ignore[attr-defined]
+                "document.body && document.body.innerText "
+                "? document.body.innerText.length : 0"
+            )
+        except Exception:  # noqa: BLE001 — best-effort; never fail the fetch
+            return
+        if not isinstance(current, int):
+            current = 0
+        if current < RENDER_MIN_TEXT_LEN:
+            # Still below the floor (empty shell / chrome stub) — do not
+            # start the stability clock; keep polling until content arrives
+            # or the cap hits.
+            last_len = None
+            stable_since = None
+        elif current == last_len:
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif time.monotonic() - stable_since >= RENDER_STABLE_SECONDS:
+                return
+        else:
+            last_len = current
+            stable_since = None
+        await asyncio.sleep(0.1)
+    # Cap hit — proceed with whatever is currently rendered (may still be
+    # empty; the AI will then report available:false, same as pre-change).
+
+
 class FetchRequest(BaseModel):
     url: str
 
@@ -242,6 +319,14 @@ async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
                     # invisible in logs.
                     _record_failure(request.url, None, kind="no_response")
                     return FetchResponseFail(reason="fetch_failed")
+
+                # SPA render wait: client-rendered pages inject the price via
+                # JS *after* domcontentloaded. Wait (bounded) for body text to
+                # stabilize before snapshotting so reducePageHtml / the AI
+                # actually see the price. Best-effort; never raises. Static
+                # pages stabilize immediately (~no added latency). See
+                # design.md §Chosen approach and _wait_for_render.
+                await _wait_for_render(page)
 
                 # Always return the rendered HTML when navigation produced a
                 # response — including non-2xx. Challenge/deny pages often
