@@ -104,6 +104,10 @@ pnpm dev
 | `SCHEDULER_LOCK_TTL_SECONDS` | Redis 锁 TTL，防止并发副本重复处理（默认 60 秒） |
 | `CAMOUFOX_SIDECAR_URL` | Camoufox 伴生服务地址（必填）。`pnpm dev` 使用 `http://localhost:8000`，Compose 内部为 `http://camoufox:8000` |
 
+## 特别感谢
+
+特别感谢 [LINUX DO](https://linux.do)。
+
 ## 许可证
 
 [GPL-3.0](LICENSE)
