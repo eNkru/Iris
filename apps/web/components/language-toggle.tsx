@@ -13,17 +13,17 @@ const LANGUAGE_OPTIONS = [
 ] as const;
 
 export function LanguageToggle() {
-  const { lang, setLang, mounted } = useI18n();
+  const { lang, setLang, mounted, t } = useI18n();
 
   if (!mounted) {
     return (
-      <div className="h-8 w-24 rounded-md border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900" />
+      <div className="h-8 w-24 rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900" />
     );
   }
 
   return (
     <SegmentedControl
-      label="Language"
+      label={t("nav.language")}
       options={LANGUAGE_OPTIONS}
       value={lang}
       onChange={(value) => setLang(value)}

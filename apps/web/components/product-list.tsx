@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useCheckNow, useDeleteProduct, useProducts, useUpdateProduct } from "../hooks/use-products";
+import {
+  useCheckNow,
+  useDeleteProduct,
+  useProducts,
+  useUpdateProduct,
+} from "../hooks/use-products";
 import { useSendSummary } from "../hooks/use-channels";
 import { useI18n } from "../lib/i18n";
 import { TelegramHelpTooltip } from "./telegram-help-tooltip";
 import {
+  Badge,
   ButtonDanger,
   ButtonSecondary,
   Card,
@@ -33,7 +39,9 @@ export function ProductList() {
     id: string;
     kind: "check" | "toggle";
   } | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+    null,
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [summaryCount, setSummaryCount] = useState<number | null>(null);
@@ -101,48 +109,64 @@ export function ProductList() {
   if (isError) {
     return (
       <ErrorBox
-        message={error instanceof Error ? error.message : t("productList.loadError")}
+        message={
+          error instanceof Error ? error.message : t("productList.loadError")
+        }
       />
     );
   }
 
-  const summaryBox = summaryCount !== null ? (
-    <SuccessBox
-      message={t("productList.summarySent", {
-        n: summaryCount,
-        items: t(
-          summaryCount === 1
-            ? "productList.summarySent.one"
-            : "productList.summarySent.other",
-        ),
-      })}
-    />
-  ) : null;
+  const summaryBox =
+    summaryCount !== null ? (
+      <SuccessBox
+        message={t("productList.summarySent", {
+          n: summaryCount,
+          items: t(
+            summaryCount === 1
+              ? "productList.summarySent.one"
+              : "productList.summarySent.other",
+          ),
+        })}
+      />
+    ) : null;
 
-  const summaryAction = (
-    <div className="flex items-center gap-2">
-      <TelegramHelpTooltip />
-      <ButtonSecondary onClick={handleSendSummary} disabled={sendSummary.isPending}>
-        {sendSummary.isPending ? (
-          <Spinner label={t("productList.sending")} />
-        ) : (
-          t("productList.sendSummary")
-        )}
-      </ButtonSecondary>
+  const listToolbar = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {summaryBox}
+      <div className="flex items-center gap-2">
+        <TelegramHelpTooltip />
+        <ButtonSecondary
+          onClick={handleSendSummary}
+          disabled={sendSummary.isPending}
+        >
+          {sendSummary.isPending ? (
+            <Spinner label={t("productList.sending")} />
+          ) : (
+            t("productList.sendSummary")
+          )}
+        </ButtonSecondary>
+      </div>
+      {products.length > 0 ? (
+        <ButtonSecondary onClick={() => refetch()}>
+          {t("productList.refresh")}
+        </ButtonSecondary>
+      ) : null}
     </div>
   );
 
   if (products.length === 0) {
     return (
-      <div className="space-y-3">
-        <Card className="text-center text-slate-500 dark:text-slate-400">
-          {t("productList.empty")}
+      <div className="space-y-4">
+        <Card className="flex flex-col items-center gap-2 py-10 text-center">
+          <p className="text-base font-medium text-slate-800 dark:text-slate-200">
+            {t("productList.emptyTitle")}
+          </p>
+          <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">
+            {t("productList.empty")}
+          </p>
         </Card>
         {actionError ? <ErrorBox message={actionError} /> : null}
-        <div className="flex items-center justify-end gap-3">
-          {summaryBox}
-          {summaryAction}
-        </div>
+        {listToolbar}
       </div>
     );
   }
@@ -159,13 +183,13 @@ export function ProductList() {
         return (
           <Card
             key={product.id}
-            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={`/products/${product.id}`}
-                  className={`block truncate font-medium hover:text-slate-600 dark:hover:text-slate-300 ${
+                  className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${
                     product.active
                       ? "text-slate-900 dark:text-slate-100"
                       : "text-slate-400 dark:text-slate-500"
@@ -173,20 +197,20 @@ export function ProductList() {
                 >
                   {product.name ?? product.url}
                 </Link>
-                {!product.active ? (
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                    {t("productList.paused")}
-                  </span>
-                ) : null}
+                <Badge tone={product.active ? "success" : "neutral"}>
+                  {product.active
+                    ? t("productList.active")
+                    : t("productList.paused")}
+                </Badge>
               </div>
               <p className="truncate text-xs text-slate-400 dark:text-slate-500">
                 {product.url}
               </p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 {product.currentPrice != null ? (
                   <>
                     <span
-                      className={`font-semibold ${
+                      className={`text-base font-semibold tabular-nums ${
                         product.active
                           ? "text-slate-900 dark:text-slate-100"
                           : "text-slate-400 dark:text-slate-500"
@@ -204,7 +228,7 @@ export function ProductList() {
                 )}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <ButtonSecondary
                 onClick={() => handleCheckNow(product.id)}
                 disabled={checkPending || togglePending}
@@ -259,13 +283,7 @@ export function ProductList() {
           </Card>
         );
       })}
-      <div className="flex items-center justify-end gap-3">
-        {summaryBox}
-        {summaryAction}
-        <ButtonSecondary onClick={() => refetch()}>
-          {t("productList.refresh")}
-        </ButtonSecondary>
-      </div>
+      {listToolbar}
     </div>
   );
 }

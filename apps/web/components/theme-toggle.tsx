@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "../lib/i18n";
 import { useTheme } from "../lib/theme";
 
 /**
@@ -9,13 +10,17 @@ import { useTheme } from "../lib/theme";
  */
 export function ThemeToggle() {
   const { theme, toggleTheme, mounted } = useTheme();
+  const { t } = useI18n();
+
+  const label =
+    theme === "dark" ? t("nav.toggleTheme.dark") : t("nav.toggleTheme");
 
   if (!mounted) {
     return (
       <button
         type="button"
-        aria-label="Toggle theme"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        aria-label={t("nav.toggleTheme")}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
         disabled
       />
     );
@@ -24,10 +29,10 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={label}
+      title={label}
       onClick={toggleTheme}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-1 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:ring-slate-400 dark:focus-visible:ring-offset-slate-950"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:ring-offset-slate-950"
     >
       {theme === "dark" ? "☀️" : "🌙"}
     </button>
