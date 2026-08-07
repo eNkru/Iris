@@ -314,3 +314,36 @@ Added structured diagnostic logging to camoufox/server.py to capture the real pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: SPA price extraction: wait for JS-rendered content
+
+**Date**: 2026-08-07
+**Task**: SPA price extraction: wait for JS-rendered content
+**Branch**: `spa-price-extraction`
+
+### Summary
+
+Root-caused woolworths create-rollback (status=unavailable): Angular SPA injects price after domcontentloaded, so page.content() snapped an empty shell and the AI reported available:false. networkidle experimentally still returned 0 body text. Added a generic content-stabilization wait in camoufox/server.py (RENDER_WAIT_SECONDS=8, RENDER_MIN_TEXT_LEN=200 floor to avoid chrome-stub false-stabilize, RENDER_STABLE_SECONDS=1). E2E: SPA PDP returns ok:true with product name + $39.99; paknsave still extracts. Spec updated in backend/performance.md. No host branching, no API change.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4ebc8bc` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
