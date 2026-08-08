@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@iris/database";
-import { alertChannels } from "@iris/database/drizzle/schema/postgres";
+import { alertChannels } from "@iris/database/drizzle/schema/sqlite";
 import { protectedProcedure } from "../../../orpc/procedures";
 import { toChannelOutput } from "../lib/format";
 import { listChannelsOutputSchema } from "../types";

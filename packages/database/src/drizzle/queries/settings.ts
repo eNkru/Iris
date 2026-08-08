@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../client";
-import { globalSettings } from "../schema/postgres";
+import { globalSettings } from "../schema/sqlite";
 import type { GlobalSettingsInput, GlobalSettingsRow } from "./types";
 
 export const GLOBAL_SETTINGS_ID = 1;

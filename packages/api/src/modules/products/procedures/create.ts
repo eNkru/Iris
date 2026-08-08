@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { db } from "@iris/database";
-import { products } from "@iris/database/drizzle/schema/postgres";
+import { products } from "@iris/database/drizzle/schema/sqlite";
 import { checkPrice } from "@iris/prices/pipeline";
 import { logger } from "@iris/utils";
 import { protectedProcedure } from "../../../orpc/procedures";

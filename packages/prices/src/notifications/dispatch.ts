@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@iris/database";
-import { alertChannels } from "@iris/database/drizzle/schema/postgres";
+import { alertChannels } from "@iris/database/drizzle/schema/sqlite";
 import { logger } from "@iris/utils";
 import { getChannel, registerChannel } from "./channel";
 import { telegramChannel } from "./telegram";

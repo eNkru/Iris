@@ -347,3 +347,37 @@ Root-caused woolworths create-rollback (status=unavailable): Angular SPA injects
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Finish UI professional polish + repo/issues links
+
+**Date**: 2026-08-08
+**Task**: Finish UI professional polish + repo/issues links
+**Branch**: `main`
+
+### Summary
+
+Completed the Professional UI polish task: heavier visual redesign (AppShell with sticky nav + bottom footer, PageHeader pattern, Card/Badge/StatusPill primitives, calmer slate surfaces + subtle cool accent tokens in light+dark), dependency-free monogram brand mark, and app footer with i18n'd repo + issues links (target=_blank, rel=noopener noreferrer) on all authenticated pages plus a compact equivalent on login. Final trellis-check verified AC1-AC10 (8 static criteria PASS, AC1/AC5 visual-only for human); typecheck + lint clean, en/zh dictionary parity 174=174. Working tree was already clean — code was merged via PR #9 (commit 534b1ca). Archived the task and recorded the journal.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `534b1ca` | (see git log) |
+| `9c3b195` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

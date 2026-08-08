@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/database.md", "reason": "Verify migrated schema + queries conform to Drizzle/DB conventions; migration correctness"}
+{"file": ".trellis/spec/backend/authentication.md", "reason": "Verify better-auth provider swap + session-cache removal preserve the auth contract and session flow"}
+{"file": ".trellis/spec/frontend/deployment.md", "reason": "Verify single-container/supervisord build keeps the instrumentation + scheduler-in-process shape intact"}
+{"file": ".trellis/spec/backend/performance.md", "reason": "Verify Redis-lock removal + in-process mutex preserve the no-duplicate-tick/no-duplicate-reading guarantees"}
+{"file": ".trellis/spec/big-question/postgres-json-jsonb.md", "reason": "Verify jsonb→sqlite json-text-mode conversion preserves typed round-trip of alertRules/config"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Final pre-commit checklist gate"}

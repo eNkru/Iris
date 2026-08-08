@@ -1,6 +1,6 @@
 import pLimit from "p-limit";
 import { getEnv, logger } from "@iris/utils";
-import { detectBlockedPage } from "./blocked-signatures";
+import { detectBlockedPage, isBlockedSignatureRetryable } from "./blocked-signatures";
 
 /**
  * Page fetching via a single anti-detect-browser transport (Camoufox) hosted
@@ -70,7 +70,7 @@ const pageFetchLimiter = pLimit(FETCH_CONCURRENCY);
 
 /**
  * Resolve the sidecar base URL. `CAMOUFOX_SIDECAR_URL` is required in env, so a
- * missing value is a hard config error at first use (matching `DATABASE_URL`,
+ * missing value is a hard config error at first use (matching `DATABASE_PATH`,
  * AC5). Trailing slashes are stripped so `base + "/v1/fetch"` always works.
  */
 function getSidecarBaseUrl(): string {
@@ -186,6 +186,14 @@ async function attemptSidecarFetch(url: string): Promise<FetchAttempt> {
  * map it to "Page fetch failed"), or a `blocked` variant when a challenge/deny
  * page was detected (AC3: a specific anti-bot reason, never "Page fetch
  * failed").
+ *
+ * Anti-bot challenges are evaluated per request, so a `blocked` result whose
+ * signature is `retryable` (behavioral challenges, captchas, managed
+ * challenges) is retried with a fresh page and backoff — confirmed live
+ * 2026-08-08: farmers.co.nz's Akamai behavioral challenge passes ~55% of
+ * fresh attempts, so retrying lifts the effective success rate well above the
+ * single-attempt pass rate. Final deny signatures (`retryable: false`) return
+ * immediately.
  */
 export async function fetchPage(
   url: string,
@@ -202,6 +210,16 @@ export async function fetchPage(
         // the specific blocked reason; otherwise this is a real page.
         const signature = detectBlockedPage(result.html);
         if (signature) {
+          if (isBlockedSignatureRetryable(signature) && attempt < MAX_RETRIES) {
+            logger.warn("Page blocked by anti-bot WAF; retrying with a fresh fetch", {
+              url,
+              signature,
+              attempt,
+              productId: options.productId,
+            });
+            await sleep(calculateBackoffDelay(attempt));
+            continue;
+          }
           return { kind: "blocked", signature };
         }
         return { kind: "ok", html: result.html, url: result.url };
@@ -211,11 +229,18 @@ export async function fetchPage(
         // The sidecar itself flagged an anti-bot block (it never throws). The
         // sidecar reports blocked without HTML, so use its reason as the
         // signature — callers map it to the specific anti-bot message (AC3).
+        const retryable = isBlockedSignatureRetryable(result.reason);
         logger.warn("Page blocked by anti-bot challenge (sidecar)", {
           url,
           reason: result.reason,
+          retryable,
+          attempt,
           productId: options.productId,
         });
+        if (retryable && attempt < MAX_RETRIES) {
+          await sleep(calculateBackoffDelay(attempt));
+          continue;
+        }
         return { kind: "blocked", signature: result.reason };
       }
 

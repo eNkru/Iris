@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { db } from "@iris/database";
-import { priceReadings, products } from "@iris/database/drizzle/schema/postgres";
+import { priceReadings, products } from "@iris/database/drizzle/schema/sqlite";
 import { protectedProcedure } from "../../../orpc/procedures";
 import { toNumber } from "../../shared";
 import { byProductInputSchema, byProductOutputSchema } from "../types";

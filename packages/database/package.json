@@ -9,7 +9,7 @@
     ".": "./src/index.ts",
     "./drizzle/schema": "./src/drizzle/schema/index.ts",
     "./drizzle/schema/auth": "./src/drizzle/schema/auth.ts",
-    "./drizzle/schema/postgres": "./src/drizzle/schema/postgres.ts",
+    "./drizzle/schema/sqlite": "./src/drizzle/schema/sqlite.ts",
     "./drizzle/client": "./src/drizzle/client.ts",
     "./drizzle/queries": "./src/drizzle/queries/index.ts"
   },
@@ -24,12 +24,12 @@
   },
   "dependencies": {
     "@iris/utils": "workspace:*",
-    "drizzle-orm": "^0.44.0",
-    "pg": "^8.13.0"
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
-    "@types/pg": "^8.11.0",
     "dotenv": "^16.4.0",
     "drizzle-kit": "^0.31.0",
     "eslint": "^9.0.0",

@@ -1,66 +1,88 @@
 # syntax=docker/dockerfile:1
-#
-# Iris — single application container that runs BOTH the Next.js web server and
-# the in-process price-check scheduler in one process (design.md R14).
-# Postgres and Redis are separate Compose services (docker-compose.yml).
-#
-# Single stage on purpose (implement.md step 9): keeping dev tooling
-# (drizzle-kit for `db:migrate`, tsc) inside the image keeps the entrypoint
-# simple and is acceptable for a private NAS deployment.
-#
-# Camoufox sidecar: the fetch transport (anti-detect Firefox) now runs in a
-# separate `camoufox` Compose service — the browser binary and its runtime
-# libraries live in the sidecar image, not here. This app image only needs
-# Node + wget (for the healthcheck), so it stays on Debian slim.
+# Iris all-in-one image: Next.js + scheduler + Camoufox on one volume-backed container.
 FROM node:22-bookworm-slim
 
-# wget is needed by the docker-compose healthcheck.
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=noninteractive
 
-# pnpm version is pinned by the packageManager field in package.json; activate
-# it via corepack (bundled with Node 22).
+# Node runs the app; Python runs Camoufox; supervisor keeps both services alive.
+# These are the GTK/NSS/X11 libraries required by the Camoufox Firefox build.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        fonts-liberation \
+        libasound2 \
+        libatk-bridge2.0-0 \
+        libatk1.0-0 \
+        libatspi2.0-0 \
+        libcairo2 \
+        libcups2 \
+        libdbus-1-3 \
+        libdbus-glib-1-2 \
+        libdrm2 \
+        libgbm1 \
+        libgdk-pixbuf-2.0-0 \
+        libgtk-3-0 \
+        libnspr4 \
+        libnss3 \
+        libpango-1.0-0 \
+        libx11-xcb1 \
+        libxcb-shm0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxkbcommon0 \
+        libxrandr2 \
+        libxshmfence1 \
+        libxt6 \
+        python3 \
+        python3-venv \
+        supervisor \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 
 WORKDIR /app
 
-# 1. Install dependencies first (layer is cached until the lockfile changes).
-#    Copy the workspace manifests, then install with --frozen-lockfile.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/package.json
-COPY packages/database/package.json packages/database/package.json
-COPY packages/utils/package.json packages/utils/package.json
-COPY packages/auth/package.json packages/auth/package.json
 COPY packages/api/package.json packages/api/package.json
+COPY packages/auth/package.json packages/auth/package.json
+COPY packages/database/package.json packages/database/package.json
 COPY packages/prices/package.json packages/prices/package.json
-
-# pnpm 11 honors the allowBuilds list in pnpm-workspace.yaml (esbuild, sharp,
-# unrs-resolver) for their postinstall scripts.
+COPY packages/utils/package.json packages/utils/package.json
 RUN pnpm install --frozen-lockfile
 
-# 2. Copy the rest of the source and build.
+# Keep Python dependencies isolated from Debian's system Python. The browser
+# binary is fetched at build time so production startup does not need internet.
+#
+# Pin camoufox to 0.5.4 — the pip version whose `camoufox fetch` downloads
+# browser build 152.0.4-beta.28 (verified in the cached config.json). That is
+# the exact build the 2026-08-04 anti-bot spike passed every challenged
+# retailer with. An unpinned install drifts to newer builds on rebuilds, which
+# can shift anti-bot pass rates; bump deliberately and re-run the retailers
+# pass-rate matrix when you do.
+RUN python3 -m venv /opt/camoufox \
+    && /opt/camoufox/bin/pip install --no-cache-dir camoufox==0.5.4 fastapi uvicorn \
+    && /opt/camoufox/bin/camoufox fetch
+
 COPY . .
 
-# DATABASE_URL is required at build time: @iris/database's client module reads
-# getEnv().DATABASE_URL on import even though the pool itself is lazy, so
-# `next build` (which type-checks and bundles server code) fails without it.
-# Compose passes it via build args; no actual DB connection happens at build.
-ARG DATABASE_URL
-ENV DATABASE_URL=${DATABASE_URL}
-
-# CAMOUFOX_SIDECAR_URL is also required by envSchema (AC5). getEnv() validates the
-# full schema on first call, so a missing value fails `next build` the same way
-# DATABASE_URL does. The build-time value is a placeholder — runtime Compose
-# overrides it with the real sidecar URL on the internal network.
-ARG CAMOUFOX_SIDECAR_URL=http://camoufox:8000
+# Server-only modules validate their environment while Next builds.
+ARG DATABASE_PATH=/app/data/iris.db
+ARG CAMOUFOX_SIDECAR_URL=http://127.0.0.1:8000
+ENV DATABASE_PATH=${DATABASE_PATH}
 ENV CAMOUFOX_SIDECAR_URL=${CAMOUFOX_SIDECAR_URL}
+ENV NODE_ENV=production
 
 RUN pnpm --filter @iris/web build
 
-# 3. Runtime
-ENV NODE_ENV=production
+COPY supervisord.conf /etc/supervisord.conf
+COPY docker-entrypoint.sh /usr/local/bin/iris-app-start
+RUN chmod +x /usr/local/bin/iris-app-start
+
+VOLUME ["/app/data"]
 EXPOSE 3000
 
-COPY docker-entrypoint.sh /usr/local/bin/iris-entrypoint
-RUN chmod +x /usr/local/bin/iris-entrypoint
-
-ENTRYPOINT ["iris-entrypoint"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

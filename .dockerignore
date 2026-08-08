@@ -2,6 +2,9 @@
 node_modules
 .pnpm-store
 
+# Local SQLite data
+data
+
 # Build outputs
 .next
 out
@@ -29,7 +32,5 @@ build
 # Trellis task artifacts (not needed in the image)
 .trellis
 
-# Docker itself (the build context doesn't need these)
-Dockerfile
-docker-compose.yml
+# Docker build metadata
 .dockerignore

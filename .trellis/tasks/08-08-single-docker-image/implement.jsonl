@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database.md", "reason": "Drizzle schema patterns, migration conventions — pg→sqlite schema rewrite must follow these"}
+{"file": ".trellis/spec/backend/authentication.md", "reason": "better-auth + drizzle adapter + session-cache contract being changed (provider pg→sqlite, remove Redis cache-aside)"}
+{"file": ".trellis/spec/frontend/deployment.md", "reason": "Instrumentation/scheduler-in-app + Docker deploy shape; single-container + supervisord must stay consistent with the edge-runtime/Node-only split"}
+{"file": ".trellis/spec/backend/performance.md", "reason": "Scheduler distributed-lock pattern + Shared Limiter Pattern being modified (remove Redis lock, keep pLimit)"}
+{"file": ".trellis/spec/shared/dependencies.md", "reason": "Adding better-sqlite3, removing pg/ioredis — dependency conventions and native-module handling"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Pre-commit checklist + code quality standards for the dialect rewrite"}
+{"file": ".trellis/spec/big-question/postgres-json-jsonb.md", "reason": "JSON column handling (jsonb→sqlite text json mode) — the riskiest conversion"}

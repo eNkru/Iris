@@ -23,10 +23,9 @@ const nextConfig: NextConfig = {
   // old Chromium transport. They are removed — the fetch transport is now a
   // thin HTTP client for the Camoufox sidecar (no browser deps in the app).
   serverExternalPackages: [
-    "pg",
+    "better-sqlite3",
     "better-auth",
     "nodemailer",
-    "ioredis",
     "drizzle-orm",
     "ai",
     "@ai-sdk/openai-compatible",
@@ -35,10 +34,21 @@ const nextConfig: NextConfig = {
   webpack: (
     config: {
       resolve?: { fallback?: Record<string, unknown> };
+      externals?: unknown[];
     },
     { isServer }: { isServer: boolean },
   ) => {
     if (isServer) {
+      // `better-sqlite3` contains a native addon loaded through the `bindings`
+      // package. Explicitly externalize it as well as listing it in
+      // `serverExternalPackages`; this is required when Next transpiles the
+      // workspace database package and otherwise bundles the addon loader into
+      // `.next` (where its relative native-binding lookup cannot succeed).
+      config.externals = [
+        ...(config.externals ?? []),
+        { "better-sqlite3": "commonjs better-sqlite3" },
+      ];
+
       config.resolve = config.resolve ?? {};
       config.resolve.fallback = {
         ...(config.resolve.fallback ?? {}),

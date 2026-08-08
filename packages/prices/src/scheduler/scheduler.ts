@@ -1,9 +1,9 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import { db } from "@iris/database";
-import { products } from "@iris/database/drizzle/schema/postgres";
+import { products } from "@iris/database/drizzle/schema/sqlite";
 import { getGlobalSettings } from "@iris/database/drizzle/queries";
-import { getEnv, getRedis, logger } from "@iris/utils";
+import { getEnv, logger } from "@iris/utils";
 import { checkPrice } from "../pipeline/check-price";
 
 type ProductRow = typeof products.$inferSelect;
@@ -13,22 +13,16 @@ type ProductRow = typeof products.$inferSelect;
  * one container).
  *
  * Every `tickMs` the loop:
- * 1. Acquires a Redis distributed lock (`prices:scheduler:lock`, NX + TTL) so
- *    concurrent app replicas don't double-process the same products
- *    (performance.md — Background Tasks with Distributed Locks).
- * 2. Queries due products in one batch query: `active = true` AND
+ * 1. Queries due products in one batch query: `active = true` AND
  *    `lastCheckedAt` older than the product's interval (per-product override
  *    falling back to the global default) — no N+1 (database.md).
  * 3. Processes each batch with bounded `p-limit` concurrency calling
  *    `checkPrice`, then releases the lock.
  *
- * A duplicate reading is additionally prevented at the database layer:
- * `checkPrice` re-reads the product row with `SELECT ... FOR UPDATE`, so even
- * if the lock TTL expires mid-tick and a second replica picks the same
- * products, the writes serialize safely.
+ * Duplicate checks for one product are prevented by checkPrice's in-process
+ * single-flight mutex, which covers scheduler and manual RPC races.
  */
 
-const LOCK_KEY = "prices:scheduler:lock";
 const DEFAULT_BATCH_SIZE = 50;
 const DEFAULT_CONCURRENCY = 5;
 const DEFAULT_INTERVAL_MINUTES = 60;
@@ -36,8 +30,6 @@ const DEFAULT_INTERVAL_MINUTES = 60;
 export interface SchedulerOptions {
   /** Loop period (default: env `SCHEDULER_TICK_MS`). */
   tickMs?: number;
-  /** Redis lock TTL in seconds (default: env `SCHEDULER_LOCK_TTL_SECONDS`). */
-  lockTtlSeconds?: number;
   /** How many due products to load per batch query (default 50). */
   batchSize?: number;
   /** Max concurrent `checkPrice` calls (default 5). */
@@ -59,8 +51,6 @@ export function startScheduler(options: SchedulerOptions = {}): void {
   }
 
   const tickMs = options.tickMs ?? getEnv().SCHEDULER_TICK_MS;
-  const lockTtlSeconds = options.lockTtlSeconds ?? getEnv().SCHEDULER_LOCK_TTL_SECONDS;
-
   tickTimer = setInterval(() => {
     void runSchedulerTick(options).catch((error: unknown) => {
       logger.error("Scheduler tick failed", {
@@ -72,7 +62,6 @@ export function startScheduler(options: SchedulerOptions = {}): void {
 
   logger.info("Scheduler started", {
     tickMs,
-    lockTtlSeconds,
     batchSize: options.batchSize ?? DEFAULT_BATCH_SIZE,
     concurrency: options.concurrency ?? DEFAULT_CONCURRENCY,
   });
@@ -100,21 +89,7 @@ export async function runSchedulerTick(options: SchedulerOptions = {}): Promise<
 
   tickInProgress = true;
 
-  const redis = getRedis();
-  const lockTtlSeconds = options.lockTtlSeconds ?? getEnv().SCHEDULER_LOCK_TTL_SECONDS;
-  const lockToken = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  let lockAcquired = false;
-
   try {
-    const acquired = await redis.set(LOCK_KEY, lockToken, "EX", lockTtlSeconds, "NX");
-    if (acquired !== "OK") {
-      logger.debug("Scheduler lock not acquired; another instance is processing", {
-        lockKey: LOCK_KEY,
-      });
-      return;
-    }
-    lockAcquired = true;
-
     const settings = await getGlobalSettings();
     const defaultIntervalMinutes =
       settings?.pollIntervalDefaultMinutes ?? DEFAULT_INTERVAL_MINUTES;
@@ -159,18 +134,6 @@ export async function runSchedulerTick(options: SchedulerOptions = {}): Promise<
       concurrency,
     });
   } finally {
-    if (lockAcquired) {
-      try {
-        // Release only if we still own the lock (compare-and-delete).
-        const releaseScript =
-          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-        await redis.eval(releaseScript, 1, LOCK_KEY, lockToken);
-      } catch (error) {
-        logger.warn("Failed to release scheduler lock", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
     tickInProgress = false;
   }
 }
@@ -198,7 +161,7 @@ async function findDueProducts(
     .where(
       and(
         eq(products.active, true),
-        sql`(${products.lastCheckedAt} IS NULL OR ${products.lastCheckedAt} < now() - make_interval(mins => COALESCE(${products.pollIntervalMinutes}, ${defaultIntervalMinutes})))`,
+        sql`(${products.lastCheckedAt} IS NULL OR ${products.lastCheckedAt} < unixepoch() - COALESCE(${products.pollIntervalMinutes}, ${defaultIntervalMinutes}) * 60)`,
         cursorId !== undefined ? gt(products.id, cursorId) : undefined,
       ),
     )

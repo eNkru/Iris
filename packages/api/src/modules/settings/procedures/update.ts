@@ -1,5 +1,5 @@
 import { db } from "@iris/database";
-import { userSettings } from "@iris/database/drizzle/schema/postgres";
+import { userSettings } from "@iris/database/drizzle/schema/sqlite";
 import { protectedProcedure } from "../../../orpc/procedures";
 import {
   getUserSettingsOutputSchema,

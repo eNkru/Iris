@@ -67,3 +67,9 @@ export async function register(): Promise<void> {
 - Wire `DATABASE_URL`/`REDIS_URL` to the Compose service names
   (`postgres:5432`, `redis:6379`) inside the app service environment — the
   repo-root `.env` holds local-dev values and must be overridden by Compose.
+
+## Single-image SQLite deployment
+
+The production topology is one Compose `app` service with one `iris-data` volume mounted at `/app/data`. `supervisord` runs Camoufox on `127.0.0.1:8000` and the Next.js app/scheduler on port 3000. The entrypoint applies SQLite migrations, waits for Camoufox `/health`, and then starts `next start`. `DATABASE_PATH=/app/data/iris.db` and `CAMOUFOX_SIDECAR_URL=http://127.0.0.1:8000` are internal container contracts.
+
+Native `better-sqlite3` is a direct web runtime dependency and is externalized from Next's server bundle. Docker includes the native build toolchain as a fallback for architectures without a prebuilt addon. Validate the image with both health endpoints, `supervisorctl status`, a supervised Camoufox restart, and a full container restart.

@@ -3,9 +3,9 @@ import { z } from "zod";
 /**
  * Single source of truth for enum values.
  *
- * The database package imports these tuples to define PostgreSQL enum types,
+ * The database package imports these tuples to define SQLite CHECK constraints,
  * and application code imports the Zod schemas / types from here — never from
- * the database package (which pulls in the pg client).
+ * the database package (which owns the database driver).
  */
 
 // Alert notification channel registry (R11)
