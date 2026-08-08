@@ -46,6 +46,8 @@ from pydantic import BaseModel, field_validator
 # yielded object is Playwright's `Browser` (see AsyncCamoufox.__aenter__).
 from camoufox.async_api import AsyncCamoufox
 from playwright.async_api import Browser
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger("camoufox-sidecar")
 logging.basicConfig(
@@ -57,9 +59,10 @@ logging.basicConfig(
 # old Playwright concurrency — performance.md Shared Limiter Pattern). Each
 # request gets a fresh page off the shared browser; pages are closed per-call.
 SIDECAR_CONCURRENCY = 5
-# Per-request navigation timeout. Matches the app-side AbortSignal.timeout
-# (45 s) so the sidecar fails before the app's HTTP timeout fires.
-FETCH_TIMEOUT_SECONDS = 45.0
+# Per-request navigation timeout. Keep the navigation timeout below the app-
+# side AbortSignal.timeout (45 s), leaving room for the bounded SPA render wait
+# and response serialization before the client aborts the request.
+FETCH_TIMEOUT_SECONDS = 35.0
 # Cap for the post-domcontentloaded SPA render wait (design.md §Chosen
 # approach). Polls body.innerText until the length stabilizes for ~1 s (or
 # this cap elapses). Bounded well under FETCH_TIMEOUT_SECONDS so a page that
@@ -76,6 +79,11 @@ RENDER_MIN_TEXT_LEN = 200
 # before we treat the page as rendered. 1 s is long enough to ride past a
 # mid-hydration flicker without waiting for the full cap on a static page.
 RENDER_STABLE_SECONDS = 1.0
+# `page.content()` snapshot retries when the page is mid-navigation. The
+# navigation settles within a few hundred ms; 3 attempts at 400 ms covers a
+# slow rewrite without approaching the per-request 35 s navigation timeout.
+CONTENT_RETRY_ATTEMPTS = 3
+CONTENT_RETRY_DELAY_SECONDS = 0.4
 
 # Diagnostic threshold for shared-browser degradation (R5). Aligned with the
 # self-heal task's intended `HEAL_THRESHOLD` (3) so the rich "browser degraded"
@@ -125,8 +133,18 @@ def _record_failure(url: str, exc: BaseException | None, *, kind: str) -> None:
     count = _consecutive_failures
     error_type = _exc_type_name(exc) if exc is not None else kind
     message = str(exc) if exc is not None else "page.goto returned no response"
+    # Include the diagnostic fields in the message as well as `extra`: the
+    # container's default Supervisor log format does not render logging extras.
+    # Without this, the operator only sees the unhelpful phrase
+    # "sidecar fetch error" and cannot distinguish a timeout from a browser or
+    # network failure from the container logs.
     logger.warning(
-        "sidecar fetch %s", kind,
+        "sidecar fetch %s url=%s error_type=%s error=%s consecutive_failures=%d",
+        kind,
+        url,
+        error_type,
+        message,
+        count,
         extra={
             "url": url,
             "error": message,
@@ -135,14 +153,20 @@ def _record_failure(url: str, exc: BaseException | None, *, kind: str) -> None:
         },
     )
     if count == DIAGNOSE_THRESHOLD and exc is not None:
+        traceback_text = _traceback_repr(exc)
         logger.warning(
-            "sidecar browser degraded — %d consecutive failures (root cause "
-            "detail below)", count,
+            "sidecar browser degraded — %d consecutive failures url=%s "
+            "error_type=%s error=%s traceback=%s",
+            count,
+            url,
+            error_type,
+            message,
+            traceback_text,
             extra={
                 "url": url,
                 "error_type": error_type,
                 "error": message,
-                "traceback": _traceback_repr(exc),
+                "traceback": traceback_text,
             },
         )
 
@@ -233,6 +257,43 @@ async def _wait_for_render(page: object) -> None:
         await asyncio.sleep(0.1)
     # Cap hit — proceed with whatever is currently rendered (may still be
     # empty; the AI will then report available:false, same as pre-change).
+
+
+async def _snapshot_content(page: object, url: str) -> str:
+    """Read `page.content()` resiliently (design.md §fetch contract).
+
+    `page.content()` raises `playwright.async_api.Error: Unable to retrieve
+    content because the page is navigating and changing the content` when the
+    page is mid-navigation / redirect at the instant of the snapshot. On
+    farmers.co.nz this is common: Akamai rewrites the document in-flight after
+    `domcontentloaded`. Without this guard the fetch surfaces as
+    `fetch_failed`, burns one of the app's retry attempts on a backoff, and
+    only re-succeeds by chance — and on the Farmers PDP the retry then often
+    hits an Akamai deny shell and rolls the create back.
+
+    Mitigation: a short bounded wait-and-retry. The navigation settles within
+    a few hundred milliseconds; we wait `CONTENT_RETRY_DELAY_SECONDS` and try
+    again, up to `CONTENT_RETRY_ATTEMPTS` times. Only a persistent failure
+    escalates to the caller's exception handler (which maps it to
+    `fetch_failed`). Never raises on the happy path.
+    """
+    for attempt in range(1, CONTENT_RETRY_ATTEMPTS + 1):
+        try:
+            return await page.content()  # type: ignore[attr-defined]
+        except PlaywrightError as exc:
+            transient = "navigating and changing the content" in str(exc)
+            if not transient or attempt >= CONTENT_RETRY_ATTEMPTS:
+                raise
+            logger.info(
+                "sidecar page content mid-navigation, retrying url=%s "
+                "attempt=%d/%d",
+                url,
+                attempt,
+                CONTENT_RETRY_ATTEMPTS,
+            )
+            await asyncio.sleep(CONTENT_RETRY_DELAY_SECONDS)
+    # Unreachable: the loop either returns or raises on the last attempt.
+    raise RuntimeError("content snapshot loop exited without a result")
 
 
 class FetchRequest(BaseModel):
@@ -337,7 +398,7 @@ async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
                 # id; a real 404 product page simply flows through to AI
                 # extraction which reports `available: false`.
                 status = response.status
-                html = await page.content()
+                html = await _snapshot_content(page, request.url)
                 final_url = page.url
                 if not response.ok:
                     logger.warning(
@@ -355,8 +416,16 @@ async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
                 _record_success()
                 return FetchResponseOk(html=html, url=final_url)
             finally:
-                await page.close()
-        except asyncio.TimeoutError as exc:
+                try:
+                    await page.close()
+                except Exception as exc:  # noqa: BLE001 — cleanup must not mask the fetch result
+                    logger.warning(
+                        "sidecar page close failed url=%s error_type=%s error=%s",
+                        request.url,
+                        _exc_type_name(exc),
+                        str(exc),
+                    )
+        except (PlaywrightTimeoutError, asyncio.TimeoutError) as exc:
             _record_failure(request.url, exc, kind="timeout")
             return FetchResponseFail(reason="fetch_failed")
         except Exception as exc:  # noqa: BLE001 — never throw to the caller

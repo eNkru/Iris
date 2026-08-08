@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@iris/database";
-import { priceReadings, products } from "@iris/database/drizzle/schema/postgres";
+import { priceReadings, products } from "@iris/database/drizzle/schema/sqlite";
 import { protectedProcedure } from "../../../orpc/procedures";
 import { toPriceReadingOutput, toProductOutput } from "../lib/format";
 import {

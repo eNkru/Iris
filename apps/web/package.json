@@ -12,6 +12,7 @@
   "dependencies": {
     "@iris/api": "workspace:*",
     "@iris/auth": "workspace:*",
+    "@iris/database": "workspace:*",
     "@iris/prices": "workspace:*",
     "@iris/utils": "workspace:*",
     "@next/env": "^15.0.0",
@@ -19,6 +20,7 @@
     "@orpc/server": "^1.14.13",
     "@tanstack/react-query": "^5.101.4",
     "better-auth": "^1.0.0",
+    "better-sqlite3": "^12.4.1",
     "next": "^15.1.0",
     "nuqs": "^2.9.3",
     "react": "^19.0.0",
@@ -33,6 +35,7 @@
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.0"
   }

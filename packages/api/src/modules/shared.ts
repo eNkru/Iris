@@ -13,16 +13,15 @@ export const okResultSchema = z.object({
 export type OkResult = z.infer<typeof okResultSchema>;
 
 /**
- * Convert a nullable DB `numeric` value (returned by node-postgres as a string)
- * to `number | null`. `numeric` never stores NaN/Infinity, so `Number()` is
- * safe here.
+ * Convert a nullable SQLite text price value to `number | null`.
+ * Prices are written with two decimal places, so `Number()` is safe here.
  */
 export function toNullableNumber(value: string | null): number | null {
   return value === null ? null : Number(value);
 }
 
 /**
- * Convert a DB `numeric` value (returned as a string) to `number`.
+ * Convert a SQLite text price value to `number`.
  */
 export function toNumber(value: string): number {
   return Number(value);

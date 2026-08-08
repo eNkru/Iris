@@ -23,7 +23,6 @@
     "@iris/utils": "workspace:*",
     "better-auth": "^1.0.0",
     "drizzle-orm": "^0.44.0",
-    "ioredis": "^5.4.0",
     "nodemailer": "^6.9.0",
     "react": "^19.0.0"
   },

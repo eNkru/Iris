@@ -438,3 +438,15 @@ const ordersWithDetails = await db.query.order.findMany({
   limit: 20,
 });
 ```
+
+## Single-container SQLite contract
+
+The runtime database is `better-sqlite3` at `DATABASE_PATH` (default `./data/iris.db`; Docker `/app/data/iris.db`). The client creates the parent directory, enables `journal_mode = WAL`, and enables `foreign_keys = ON`. SQLite is authoritative for application and better-auth tables; Redis is not required.
+
+- Dates use `integer(name, { mode: "timestamp" })`, storing Unix epoch seconds while returning `Date` objects. SQLite defaults use `sql\`(unixepoch())\``.
+- Booleans use `integer(name, { mode: "boolean" })`.
+- JSON columns use `text(name, { mode: "json" }).$type<T>()` for automatic serialization and parsing.
+- PostgreSQL enums become typed text plus literal SQLite `CHECK` constraints; migration DDL must not contain bound `?` parameters.
+- `better-sqlite3` must be externalized from Next's server bundle and declared directly by the runtime web package so pnpm resolves the native addon.
+
+The checked-in initial migration must be generated with `dialect: "sqlite"`, applied successfully to a fresh scratch file, and run idempotently by the container entrypoint.

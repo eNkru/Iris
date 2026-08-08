@@ -15,7 +15,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "ioredis": "^5.4.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

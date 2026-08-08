@@ -10,9 +10,9 @@ Self-hosted price tracking & alert app. Add products, let Iris watch their price
 - **Price-drop alerts** — configurable alert rules evaluated on every price check
 - **Alert channels** — Email and Telegram notifications, plus periodic summaries
 - **AI-powered extraction** — prices are extracted from product pages by any OpenAI-compatible model (OpenAI, OpenRouter, a local Ollama server, …); instance-level AI settings are admin-editable at runtime
-- **Anti-bot fetching** — pages are fetched through a [Camoufox](https://camoufox.com) sidecar (anti-detect Firefox), the single fetch transport, so pages behind DataDome / Cloudflare / Akamai challenges still work
+- **Anti-bot fetching** — pages are fetched through [Camoufox](https://camoufox.com), supervised inside the same container as the app, so pages behind DataDome / Cloudflare / Akamai challenges still work
 - **Magic-link auth** — email magic-link login via better-auth, with a bootstrapped admin user
-- **Scheduler** — in-process scheduler loop with a Redis distributed lock, so multiple app replicas never double-process the same product
+- **Scheduler** — an in-process scheduler loop with a per-product single-flight guard
 
 ## Stack
 
@@ -21,9 +21,9 @@ Self-hosted price tracking & alert app. Add products, let Iris watch their price
 | Web app | Next.js 15, React 19, Tailwind CSS v4, TanStack Query, Recharts |
 | API | oRPC + Zod |
 | Auth | better-auth (magic link, SMTP) |
-| Database | PostgreSQL 16 + Drizzle ORM |
-| Cache / locks | Redis 7 (session cache, scheduler lock) |
-| Price pipeline | Camoufox fetch sidecar + AI SDK (OpenAI-compatible) |
+| Database | SQLite + Drizzle ORM + better-sqlite3 |
+| Runtime | One Node/Python image supervised by supervisord |
+| Price pipeline | Camoufox fetch service + AI SDK (OpenAI-compatible) |
 | Notifications | SMTP (nodemailer), Telegram Bot API |
 
 ## Repository layout
@@ -35,44 +35,48 @@ apps/
   web/            Next.js app — UI, oRPC client, in-process scheduler entrypoint
 packages/
   api/            oRPC router, procedures, middleware
-  auth/           better-auth setup, SMTP magic-link mailer, session cache, admin bootstrap
-  database/       Drizzle schema, migrations, queries, seed script
+  auth/           better-auth setup, SMTP magic-link mailer, admin bootstrap
+  database/       SQLite Drizzle schema, migrations, queries, seed script
   prices/         price pipeline (fetch → AI extract → alert rules), scheduler, notifications
-  utils/          shared helpers, env validation, redis client
-camoufox/         Camoufox fetch sidecar (Python service, runs as its own container)
+  utils/          shared helpers and environment validation
+camoufox/         Camoufox HTTP fetch service source (runs inside the image)
+Dockerfile        Single image for Node, Python, and Camoufox
+supervisord.conf  Supervises the web app and Camoufox processes
 ```
 
 ## Quick start (Docker)
 
-The fastest way to run Iris — one command brings up the app, the Camoufox sidecar, Postgres, and Redis. Migrations run automatically on app start.
+The recommended deployment is one container with one persistent SQLite volume. The image runs the Next.js app, scheduler, and Camoufox fetch service under supervisord; migrations run automatically on startup.
 
 ```bash
 cp .env.example .env   # adjust secrets (BETTER_AUTH_SECRET, SMTP, AI_API_KEY, …)
 docker compose up --build -d
 ```
 
-Then open <http://localhost:3000>.
-
-> The Camoufox sidecar is a required dependency: the app reads `CAMOUFOX_SIDECAR_URL` and fails fast with a logged error if the sidecar is down rather than silently misbehaving.
+Then open <http://localhost:3000>. All application data is stored in the `iris-data` Docker volume.
 
 ## Local development
 
 ```bash
 pnpm install
-
-# start Postgres + Redis + the Camoufox sidecar (reusable standalone)
-docker compose up postgres redis camoufox
-
-# copy and adjust your environment
 cp .env.example .env
 
-# run migrations (idempotent) and optional seed data
+# create/update ./data/iris.db
 pnpm db:migrate
 pnpm db:seed
 
-# start the Next.js dev server (http://localhost:3000)
+# run the Camoufox service separately in a Python environment
+# (or use `docker compose up --build -d` for the complete stack)
+cd camoufox
+python -m pip install camoufox fastapi uvicorn
+camoufox fetch
+uvicorn server:app --host 127.0.0.1 --port 8000
+
+# in another terminal, from the repository root
 pnpm dev
 ```
+
+For a production-like local run, use `docker compose up --build -d`; no Postgres, Redis, or standalone sidecar containers are required.
 
 ### Scripts
 
@@ -82,7 +86,7 @@ pnpm dev
 | `pnpm build` | Build all packages |
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm lint` | Lint all packages |
-| `pnpm db:generate` | Generate Drizzle migrations from the schema |
+| `pnpm db:generate` | Generate SQLite Drizzle migrations |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:seed` | Seed the database |
 | `pnpm db:studio` | Open Drizzle Studio |
@@ -95,14 +99,14 @@ Copy `.env.example` to `.env` and adjust. The important ones:
 | --- | --- |
 | `APP_URL` | Public URL of the app (used in magic-link emails) |
 | `BETTER_AUTH_SECRET` | Session signing secret — always override in production (`openssl rand -base64 32`) |
-| `DATABASE_URL` | Postgres connection string |
-| `REDIS_URL` | Redis connection string (session cache + scheduler lock) |
+| `DATABASE_PATH` | SQLite database path (default `./data/iris.db`; Docker uses `/app/data/iris.db`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | SMTP server for magic-link login emails |
-| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | Any OpenAI-compatible endpoint; build-time fallbacks — instance-level settings are admin-editable at runtime |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | Any OpenAI-compatible endpoint; instance-level settings are admin-editable at runtime |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot for the alert channel |
 | `SCHEDULER_TICK_MS` | How often the scheduler looks for due products (default 30 s) |
-| `SCHEDULER_LOCK_TTL_SECONDS` | Redis lock TTL so concurrent replicas don't double-process (default 60 s) |
-| `CAMOUFOX_SIDECAR_URL` | Camoufox sidecar URL (required). `http://localhost:8000` for `pnpm dev`, `http://camoufox:8000` inside Compose |
+| `CAMOUFOX_SIDECAR_URL` | Fetch service URL for local development; Docker sets this internally to `http://127.0.0.1:8000` |
+
+Existing Postgres data is not migrated automatically. Re-add tracked products or perform a deliberate manual export/import before switching deployments.
 
 ## Special Thanks
 

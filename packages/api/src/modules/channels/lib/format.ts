@@ -1,4 +1,4 @@
-import { alertChannels } from "@iris/database/drizzle/schema/postgres";
+import { alertChannels } from "@iris/database/drizzle/schema/sqlite";
 import { asRecord } from "../../shared";
 import type { ChannelOutput } from "../types";
 

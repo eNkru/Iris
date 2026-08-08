@@ -11,10 +11,10 @@
  *   code therefore lives in ./instrumentation-node and is loaded only inside
  *   the `NEXT_RUNTIME === 'nodejs'` branch: Next statically replaces that
  *   constant per compilation ('edge' vs 'nodejs'), so webpack drops the
- *   dead branch and never bundles pg/ioredis/drizzle into the edge runtime.
- * - `register()` is not invoked during `next build` (NEXT_PHASE check), so a
- *   build-time DATABASE_URL is only needed to satisfy module-level env
- *   validation in @iris/database, not to boot the scheduler.
+ *   dead branch and never bundles Node-only database dependencies into the edge runtime.
+ * - `register()` is not invoked during `next build` (NEXT_PHASE check), so the
+ *   build-time DATABASE_PATH only satisfies module-level env validation in
+ *   @iris/database, not to boot the scheduler.
  * - The scheduler is intentionally NOT started in development: `next dev`
  *   re-runs instrumentation per server spawn and would duplicate ticks; dev
  *   work is exercised through the "Run checks" admin action instead.

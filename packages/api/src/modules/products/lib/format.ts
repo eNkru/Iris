@@ -1,4 +1,4 @@
-import { priceReadings, products } from "@iris/database/drizzle/schema/postgres";
+import { priceReadings, products } from "@iris/database/drizzle/schema/sqlite";
 import { toNullableNumber, toNumber } from "../../shared";
 import type { PriceReadingOutput, ProductOutput } from "../types";
 
@@ -6,10 +6,9 @@ type ProductRow = typeof products.$inferSelect;
 type ReadingRow = typeof priceReadings.$inferSelect;
 
 /**
- * Map a `products` DB row to the API output shape. Drizzle returns `numeric`
- * columns as strings, so prices are normalized to `number` here (the output
- * schemas declare `z.number()`, not `z.coerce.number()`, to keep the contract
- * explicit).
+ * Map a `products` DB row to the API output shape. SQLite stores prices as
+ * fixed-point text, so prices are normalized to numbers here (the output
+ * schemas declare `z.number()`, not `z.coerce.number()`).
  */
 export function toProductOutput(row: ProductRow): ProductOutput {
   return {

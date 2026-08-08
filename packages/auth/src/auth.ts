@@ -21,7 +21,7 @@ export const auth = betterAuth({
   baseURL: getEnv().APP_URL,
   secret: getEnv().BETTER_AUTH_SECRET,
 
-  database: drizzleAdapter(db, { provider: "pg" }),
+  database: drizzleAdapter(db, { provider: "sqlite" }),
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

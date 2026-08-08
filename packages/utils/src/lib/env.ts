@@ -11,11 +11,8 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.string().url().default("http://localhost:3000"),
 
-  // Database
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-
-  // Redis (session cache, scheduler lock)
-  REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
+  // Database — a local SQLite file (the parent directory is created on startup).
+  DATABASE_PATH: z.string().min(1, "DATABASE_PATH is required").default("./data/iris.db"),
 
   // SMTP — magic-link login emails (and future email alert channel)
   SMTP_HOST: z.string().default("localhost"),
@@ -37,15 +34,14 @@ export const envSchema = z.object({
   // Telegram alert channel
   TELEGRAM_BOT_TOKEN: z.string().default(""),
 
-  // Scheduler — in-process loop tick and distributed-lock TTL
+  // Scheduler — in-process loop tick
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(30_000),
-  SCHEDULER_LOCK_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 
   // Camoufox sidecar — the single fetch transport (design.md §Config).
   // The sidecar runs the anti-detect Firefox browser that fetches product
   // pages behind hard anti-bot challenges (DataDome / Cloudflare / Akamai).
   // It is a required dependency in every environment (dev and prod): a missing
-  // value is a hard config error at first use, matching `DATABASE_URL` (AC5).
+  // value is a hard config error at first use, matching `DATABASE_PATH`.
   CAMOUFOX_SIDECAR_URL: z.string().url("CAMOUFOX_SIDECAR_URL is required"),
 });
 

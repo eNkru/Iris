@@ -524,10 +524,21 @@ export async function fetchPage(url: string, opts: FetchPageOptions) {
       const result = await attemptSidecarFetch(url, opts);
       if (result.kind === "ok") {
         const signature = detectBlockedPage(result.html); // double-check returned HTML
+        if (signature && isBlockedSignatureRetryable(signature) && attempt < MAX_RETRIES) {
+          // challenge evaluated per request → fresh page often passes; backoff + retry
+          await sleep(calculateBackoffDelay(attempt));
+          continue;
+        }
         if (signature) return { kind: "blocked", signature };
         return { kind: "ok", html: result.html, url: result.url };
       }
-      if (result.kind === "blocked") return { kind: "blocked", signature: result.reason };
+      if (result.kind === "blocked") {
+        if (isBlockedSignatureRetryable(result.reason) && attempt < MAX_RETRIES) {
+          await sleep(calculateBackoffDelay(attempt));
+          continue;
+        }
+        return { kind: "blocked", signature: result.reason };
+      }
       // error → backoff and retry; null on total failure
     }
     return null;
@@ -551,13 +562,17 @@ but are **not** challenge shells — the signature must not treat bare
 ```typescript
 // packages/prices/src/pipeline/blocked-signatures.ts
 const BLOCKED_SIGNATURES = [
-  { id: "akamai-waf", test: (html) => html.includes("/WAF_Deny_Page/") },
+  // final deny verdict — not retryable (same fingerprint → same deny)
+  { id: "akamai-waf", retryable: false, test: (html) => html.includes("/WAF_Deny_Page/") },
   // title "Access Denied" + small HTML (edge block after soft home pass)
-  { id: "akamai-access-denied", test: (html) => /* title + len < 5e3 */ },
-  // intermediate behavioral challenge page (not a real PDP)
-  { id: "akamai-behavioral-challenge", test: (html) =>
+  { id: "akamai-access-denied", retryable: false, test: (html) => /* title + len < 5e3 */ },
+  // intermediate behavioral challenge page (not a real PDP) — retryable
+  { id: "akamai-behavioral-challenge", retryable: true, test: (html) =>
       html.includes("sec-if-cpt-container") && html.length < 20_000 },
-  // DataDome captcha (kogan when the challenge is not solved)
+  // head-only shell: no <title>, no <body>, <5 KB (failed-challenge snapshot) — retryable
+  { id: "akamai-empty-shell", retryable: true, test: (html) =>
+      html.length < 5_000 && !/<title[\s>]/i.test(html) && !/<body[\s>]/i.test(html) },
+  // DataDome captcha (kogan when the challenge is not solved) — retryable
   { id: "datadome-captcha", test: (html) => html.includes("captcha-delivery.com") },
   // Cloudflare managed-challenge shell only — NOT bare Turnstile embeds on
   // real PDPs (pbtech loads challenges.cloudflare.com/turnstile on a full page).
@@ -569,7 +584,15 @@ const BLOCKED_SIGNATURES = [
          )) },
 ];
 export function detectBlockedPage(html: string): string | null { ... }
+export function isBlockedSignatureRetryable(id: string): boolean { ... } // unknown ⇒ true
 ```
+
+**`retryable` contract**: a blocked signature with `retryable: true` is retried
+by `fetchPage` with a fresh page and backoff (see below); `false` returns
+immediately. Final deny verdicts (`akamai-waf`, `akamai-access-denied`) are
+fingerprint-level outcomes — retrying them just burns latency. Challenge
+shells (behavioral challenges, captchas, managed challenges) default to
+retryable because anti-bot challenges are evaluated per request.
 
 ```typescript
 // packages/prices/src/pipeline/check-price.ts — after fetchPage
@@ -589,6 +612,60 @@ surfaces `check.reason`, so an operator sees "Anti-bot WAF deny page
 (datadome-captcha) — …" instead of the generic text. Detection stays even
 though Camoufox passes today: a clear failure beats a silent "unavailable",
 and a regression on any site is visible, not silent.
+
+### Live findings — Akamai behavioral challenge is probabilistic (2026-08-08)
+
+farmers.co.nz (Akamai Bot Manager) serves a **behavioral challenge that is
+probabilistic, not a hard deny**. Direct headless Camoufox probes of one
+farmers PDP (same browser build the 08-04 spike used):
+
+- ~55% of fresh attempts return the real PDP (~180–214 KB, price content
+  present) in ~4–5 s.
+- The rest return one of two failure shapes: the `sec-if-cpt-container`
+  challenge (~2.6 KB, no title, no rendered text) or a head-only empty shell
+  (~1.4–1.6 KB, no `<title>`, no `<body>`).
+- **The challenge never resolves in-place once served** — observed 60+ s with
+  zero content change. A longer render wait does NOT help; only a fresh page
+  does.
+- The failed-challenge navigation is slow (Akamai delays the response; one
+  `goto` took 31.5 s), so retries must stay inside the 45 s per-attempt
+  envelope and the `MAX_RETRIES` budget.
+
+Mitigations shipped with this finding:
+
+1. `akamai-empty-shell` signature closes the detection gap (the shell was
+   previously treated as a real page → wasted AI call → misleading
+   "unavailable").
+2. `fetchPage` retries `retryable` blocked results with a fresh page and the
+   existing exponential backoff. With a ~55% per-attempt pass rate, 3 attempts
+   lift the effective success rate to ~90%. **Latency tradeoff**: a retryable
+   challenge that never passes now costs up to `MAX_RETRIES` × per-attempt
+   fetch time (each attempt up to 45 s) before the final `blocked` reason is
+   returned, versus 1 attempt before. Bounded by the shared `MAX_RETRIES`;
+   scheduler batches may hold limiter slots longer while stuck-blocked
+   products retry.
+3. Dockerfile pins `camoufox==0.5.4` (browser build 152.0.4-beta.28) so
+   rebuilds cannot silently drift the fingerprint. Verify the pass-rate matrix
+   when bumping.
+
+**Note**: the single-attempt pass rate was ~55% on the day of testing; it can
+shift as Akamai tunes the challenge. The retry-on-blocked behavior absorbs
+moderate drift; a site that degrades to a consistent hard deny will surface
+the `akamai-waf` / `akamai-access-denied` reason on the first attempt instead.
+
+**Escalation observed live (2026-08-08)**: after ~30 sustained probes from one
+container IP in ~40 minutes, farmers' Akamai block escalated from the
+probabilistic behavioral challenge to a **hard edge "Access Denied"** page
+(`<title>Access Denied</title>`, ~0.5 KB, `errors.edgesuite.net` reference) on
+8/8 subsequent attempts. This is rate/behavioral IP scoring, not a code
+regression — the same browser/fingerprint passed ~5–6 attempts earlier. Keep
+`akamai-access-denied` non-retryable (a hard edge 403 is a final verdict when
+served; a retry adds ~3 × 3–4 s latency with no benefit). The block is expected
+to decay as the IP cools down; a low-frequency scheduler cadence (one check
+per product per poll interval) typically passes even while aggressive probing
+gets denied. Re-run the pass-rate matrix after a cooling-off period; if a
+retailer stays hard-blocked for a user, the documented escalation remains a
+paid scraping API / residential proxy (08-04 PRD).
 
 ### Required wiring
 

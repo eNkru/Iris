@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@iris/database";
-import { priceReadings, products } from "@iris/database/drizzle/schema/postgres";
+import { priceReadings, products } from "@iris/database/drizzle/schema/sqlite";
 import { getGlobalSettings } from "@iris/database/drizzle/queries";
 import { logger } from "@iris/utils";
 import { dispatchPriceAlert } from "../notifications/dispatch";
@@ -10,6 +10,8 @@ import { fetchPage } from "./fetch-page";
 import type { CheckPriceResult } from "./types";
 
 type ProductRow = typeof products.$inferSelect;
+
+const inflightChecks = new Map<string, Promise<CheckPriceResult>>();
 
 /**
  * checkPrice(productId) — the synchronous price-check pipeline (R8):
@@ -23,13 +25,26 @@ type ProductRow = typeof products.$inferSelect;
  * transaction so a slow page or model does not hold a connection. The
  * read-modify-write — load the product row, insert a `price_readings` row when
  * the price changed, update `currentPrice`/`lastCheckedAt` — runs inside a
- * single transaction using `SELECT ... FOR UPDATE` on the product row.
- * Concurrent checks of the same product (scheduler tick + manual check-now)
- * therefore serialize on the row lock: the second writer re-reads the row
- * inside the transaction, sees the price already recorded, and only refreshes
- * `lastCheckedAt` — no duplicate readings, no lost updates.
+ * single transaction. Concurrent checks of the same product (scheduler tick +
+ * manual check-now) are coalesced by the module-level single-flight mutex, so
+ * only one fetch/extraction/write pipeline runs for a product at a time.
  */
-export async function checkPrice(productId: string): Promise<CheckPriceResult> {
+export function checkPrice(productId: string): Promise<CheckPriceResult> {
+  const existing = inflightChecks.get(productId);
+  if (existing) {
+    return existing;
+  }
+
+  const pending = runCheckPrice(productId);
+  inflightChecks.set(productId, pending);
+  const cleanup = (): void => {
+    inflightChecks.delete(productId);
+  };
+  void pending.then(cleanup, cleanup);
+  return pending;
+}
+
+async function runCheckPrice(productId: string): Promise<CheckPriceResult> {
   const now = new Date();
 
   const product = await getProductForCheck(productId);
@@ -87,12 +102,12 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
   }
 
   // --- Transactional read-modify-write ---
-  const outcome = await db.transaction(async (tx) => {
-    const [locked] = await tx
+  const outcome = db.transaction((tx) => {
+    const locked = tx
       .select()
       .from(products)
       .where(eq(products.id, productId))
-      .for("update");
+      .get();
 
     if (!locked) {
       return { kind: "not_found" as const };
@@ -103,24 +118,25 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
     const changed = oldPrice === null || roundToCent(oldPrice) !== roundToCent(newPrice);
 
     if (!changed) {
-      await tx
+      tx
         .update(products)
         .set({ lastCheckedAt: now, updatedAt: now })
-        .where(eq(products.id, productId));
+        .where(eq(products.id, productId))
+        .run();
 
       return { kind: "unchanged" as const, price: newPrice, product: locked };
     }
 
     // Insert history only on price change (R9); update the current price and
     // fill name/currency from the extraction when not yet known.
-    await tx.insert(priceReadings).values({
+    tx.insert(priceReadings).values({
       productId,
       price: newPrice.toFixed(2),
       currency: extraction.currency,
       checkedAt: now,
-    });
+    }).run();
 
-    await tx
+    tx
       .update(products)
       .set({
         currentPrice: newPrice.toFixed(2),
@@ -129,7 +145,8 @@ export async function checkPrice(productId: string): Promise<CheckPriceResult> {
         lastCheckedAt: now,
         updatedAt: now,
       })
-      .where(eq(products.id, productId));
+      .where(eq(products.id, productId))
+      .run();
 
     return {
       kind: "changed" as const,

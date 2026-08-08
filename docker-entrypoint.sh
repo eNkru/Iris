@@ -1,27 +1,21 @@
 #!/bin/sh
-set -e
+set -eu
 
-# Iris container entrypoint.
-#
-# The app container runs the web server AND the in-process scheduler
-# (design.md R14). Before booting we apply pending Drizzle migrations so a
-# fresh Postgres volume needs no manual step.
+mkdir -p /app/data
 
-echo "[iris] waiting for database..."
+echo "[iris] applying SQLite migrations"
+pnpm db:migrate
 
-# drizzle-kit migrate fails fast when Postgres is still starting; retry with
-# backoff. `pg_isready` isn't shipped in this image, so we probe via migrate.
+echo "[iris] waiting for Camoufox"
 attempt=0
-while ! pnpm db:migrate >/tmp/migrate.log 2>&1; do
+while ! wget -qO- http://127.0.0.1:8000/health >/dev/null 2>&1; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 30 ]; then
-    echo "[iris] database never became ready; last migrate output:" >&2
-    cat /tmp/migrate.log >&2
+  if [ "$attempt" -ge 60 ]; then
+    echo "[iris] Camoufox did not become ready" >&2
     exit 1
   fi
-  echo "[iris] database not ready (attempt $attempt), retrying in 2s"
   sleep 2
 done
 
-echo "[iris] migrations applied, starting web server + scheduler"
+echo "[iris] starting web server and scheduler"
 exec pnpm --filter @iris/web start
