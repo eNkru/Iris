@@ -52,7 +52,8 @@ COPY packages/auth/package.json packages/auth/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/prices/package.json packages/prices/package.json
 COPY packages/utils/package.json packages/utils/package.json
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile \
+    && rm -rf /root/.local/share/pnpm /root/.cache/pnpm
 
 # Keep Python dependencies isolated from Debian's system Python. The browser
 # binary is fetched at build time so production startup does not need internet.
@@ -76,7 +77,8 @@ ENV DATABASE_PATH=${DATABASE_PATH}
 ENV CAMOUFOX_SIDECAR_URL=${CAMOUFOX_SIDECAR_URL}
 ENV NODE_ENV=production
 
-RUN pnpm --filter @iris/web build
+RUN pnpm --filter @iris/web build \
+    && rm -rf apps/web/.next/cache
 
 COPY supervisord.conf /etc/supervisord.conf
 COPY docker-entrypoint.sh /usr/local/bin/iris-app-start
