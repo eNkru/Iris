@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "The test file must satisfy mandatory rules: no non-null assertions, no any, no console.log, import ordering with `import type`, AAA test structure, never swallow errors."}
+{"file": ".trellis/spec/shared/dependencies.md", "reason": "Verify vitest lands in root devDependencies (not a runtime/prod dep) and pnpm-lock.yaml updates; the Docker image build must stay unaffected."}
+{"file": ".trellis/spec/frontend/deployment.md", "reason": "Verify the only stack-visible change is the dev-only 8000:8000 compose line; Dockerfile EXPOSE and docs/qnap-deployment.md are unchanged; tests/ lives outside the workspace globs so `pnpm -r typecheck` stays green."}

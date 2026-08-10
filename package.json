@@ -11,9 +11,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "test:acceptance": "vitest run --dir tests/acceptance",
     "db:generate": "pnpm --filter @iris/database db:generate",
     "db:migrate": "pnpm --filter @iris/database db:migrate",
     "db:seed": "pnpm --filter @iris/database db:seed",
     "db:studio": "pnpm --filter @iris/database db:studio"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
   }
 }
