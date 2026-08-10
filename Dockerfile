@@ -66,7 +66,19 @@ RUN pnpm install --frozen-lockfile \
 # pass-rate matrix when you do.
 RUN python3 -m venv /opt/camoufox \
     && /opt/camoufox/bin/pip install --no-cache-dir camoufox==0.5.4 fastapi uvicorn \
-    && /opt/camoufox/bin/camoufox fetch
+    && /opt/camoufox/bin/camoufox fetch \
+    # The fetched bundle carries font sets for all three fingerprint OSes it
+    # can emulate (macOS 569M + Windows 322M + Linux 41M = ~932M of font
+    # files under .../browsers/official/<version>/fonts/{macos,windows,linux}).
+    # The container runs with the Linux fingerprint pinned (see server.py), so
+    # fontconfig only ever resolves the bundled fonts/linux/ set via
+    # fontconfig/linux/fonts.conf; the macos/windows TTCs are dead weight and
+    # gzip poorly, so prune them here rather than carry them through the build.
+    && rm -rf /root/.cache/camoufox/browsers/official/*/fonts/macos \
+    && rm -rf /root/.cache/camoufox/browsers/official/*/fonts/windows \
+    # `COPY . .` later supersedes /app sources; the pre-install copies above
+    # were only for `pnpm install`, so drop them to keep this layer lean.
+    && rm -rf apps packages
 
 COPY . .
 
@@ -78,7 +90,9 @@ ENV CAMOUFOX_SIDECAR_URL=${CAMOUFOX_SIDECAR_URL}
 ENV NODE_ENV=production
 
 RUN pnpm --filter @iris/web build \
-    && rm -rf apps/web/.next/cache
+    && rm -rf apps/web/.next/cache \
+    && rm -rf /root/.cache/pnpm \
+    && rm -rf /app/data
 
 COPY supervisord.conf /etc/supervisord.conf
 COPY docker-entrypoint.sh /usr/local/bin/iris-app-start

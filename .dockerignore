@@ -5,12 +5,15 @@ node_modules
 # Local SQLite data
 data
 
-# Build outputs
-.next
-out
-dist
-build
-*.tsbuildinfo
+# Build outputs — anchored with **/ so nested copies are excluded too. A bare
+# pattern like `.next` matches only the repo root, so a local dev build under
+# apps/web/.next (often hundreds of MB) or packages/*/dist would otherwise
+# ride into the image context and get COPY'd in.
+**/.next
+**/out
+**/dist
+**/build
+**/*.tsbuildinfo
 
 # Environment & secrets — never bake into the image
 .env
@@ -28,6 +31,9 @@ build
 .agents
 .DS_Store
 *.log
+
+# Unrelated stale scaffolding / validation artifacts — nothing the image needs
+tmall-poc
 
 # Trellis task artifacts (not needed in the image)
 .trellis
