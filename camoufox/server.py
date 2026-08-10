@@ -323,8 +323,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Launch the shared Camoufox browser at startup, close it on shutdown."""
     global _semaphore, _camoufox_ctx, _browser
     _semaphore = asyncio.Semaphore(SIDECAR_CONCURRENCY)
-    logger.info("Launching shared Camoufox browser (headless)")
-    _camoufox_ctx = AsyncCamoufox(headless=True)
+    logger.info("Launching shared Camoufox browser (headless, linux fingerprint)")
+    # The single deployed browser runs in a Linux container with only the
+    # Linux font set physically present; pin the fingerprint OS to linux so
+    # navigator.platform / fonts / fontconfig are always self-consistent (a
+    # mac/win fingerprint that names fonts which can't resolve locally is a
+    # fingerprinting tell). The image also prunes the macos/windows font dirs.
+    _camoufox_ctx = AsyncCamoufox(headless=True, os="linux")
     # `__aenter__` yields the `AsyncBrowser`; `new_page()` lives on it, not on
     # the `AsyncCamoufox` context manager itself.
     _browser = await _camoufox_ctx.__aenter__()
