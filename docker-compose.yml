@@ -25,6 +25,8 @@ services:
       SCHEDULER_TICK_MS: ${SCHEDULER_TICK_MS:-30000}
     ports:
       - "3000:3000"
+      # dev-only: expose the Camoufox sidecar for the acceptance tests; never enable in production
+      - "8000:8000"
     volumes:
       - iris-data:/app/data
     healthcheck:

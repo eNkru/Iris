@@ -647,6 +647,16 @@ Mitigations shipped with this finding:
 3. Dockerfile pins `camoufox==0.5.4` (browser build 152.0.4-beta.28) so
    rebuilds cannot silently drift the fingerprint. Verify the pass-rate matrix
    when bumping.
+4. The sidecar pins the Camoufox fingerprint OS to `linux`
+   (`AsyncCamoufox(headless=True, os="linux")` in `camoufox/server.py`) and the
+   Dockerfile prunes the bundled `macos`/`windows` font directories (~891 MB of
+   TTCs) right after `camoufox fetch`. The container only ever runs the Linux
+   fingerprint, so a macOS/Windows fingerprint that named fonts fontconfig
+   cannot resolve would itself be a fingerprinting tell, and those TTCs gzip
+   poorly so they were dead weight in the image. This shrank the all-in-one
+   image ~11% (2.19 GB → 1.94 GB). When bumping `camoufox`, re-check the
+   `browsers/official/<version>/fonts/` layout before re-adding the prune, and
+   keep the `os="linux"` pin in sync with whichever font set is kept.
 
 **Note**: the single-attempt pass rate was ~55% on the day of testing; it can
 shift as Akamai tunes the challenge. The retry-on-blocked behavior absorbs
