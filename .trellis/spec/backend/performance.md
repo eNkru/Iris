@@ -700,11 +700,13 @@ The sidecar is a separate Compose service (`camoufox/`):
   uvicorn`, `camoufox fetch` at build (browser cached into the image, offline
   at runtime), `CMD uvicorn`. Camoufox ships `linux/arm64` builds, so ARM NAS
   deployments work.
-- `camoufox/server.py`: FastAPI app; lazy single `AsyncCamoufox` (headless)
-  launched in the lifespan; asyncio semaphore (5); `POST /v1/fetch`; `GET
-  /health`; fresh page per request; `goto` `domcontentloaded` (45 s); then a
-  bounded SPA render wait (see Pattern below); `content()` + `page.url()`;
-  stdlib logging; never throws to the caller.
+- `camoufox/server.py`: FastAPI app; one shared `AsyncCamoufox`
+  (headless, `os="linux"`) launched **lazily on the first fetch** and torn
+  down after an idle timeout — see Pattern: Lazy browser lifecycle below;
+  asyncio semaphore (5); `POST /v1/fetch`; `GET /health`; fresh page per
+  request; `goto` `domcontentloaded` (45 s); then a bounded SPA render wait
+  (see Pattern below); `content()` + `page.url()`; stdlib logging; never
+  throws to the caller.
 - `docker-compose.yml`: `camoufox` service (internal network only,
   `restart: unless-stopped`); app `depends_on: camoufox` (soft — `service_started`,
   so a slow sidecar start does not block the app from serving) and gets
@@ -794,12 +796,45 @@ await _wait_for_render(page)  # poll innerText length; floor + stable + cap
 html = await page.content()
 ```
 
-### Pattern: sidecar failure logging and degradation diagnostics
+### Pattern: Lazy browser lifecycle (launch on first fetch, teardown on idle)
 
-The sidecar (`camoufox/server.py`) is the single fetch transport, so a silent
-shared-browser degradation is the worst-case failure mode: every retailer
-returns `{ok:false, reason:"fetch_failed"}` and the app can only surface the
-generic "Page fetch failed". Observed 2026-08-06 — after ~3 h of uptime the
+The shared `AsyncCamoufox` browser is the single biggest resident resource in
+the container (~350-500 MB RSS across `camoufox-bin` + contentproc children).
+On a lightly-loaded host (e.g. a NAS scraping once per hour) an always-on
+browser is ~500 MB doing nothing for ~59 min/hour. The lifecycle is therefore
+**lazy**: launched on the first `POST /v1/fetch`, reused for subsequent
+fetches, and torn down after a configurable idle period with no fetch activity
+(`BROWSER_IDLE_TIMEOUT_SECONDS`, default 300 s, env
+`CAMOUFOX_IDLE_TIMEOUT_SECONDS`).
+
+**Contract (code-spec)** in `camoufox/server.py`:
+- The browser is **NOT** launched in `lifespan`. `lifespan` only creates the
+  semaphore, a launch `asyncio.Lock`, and an `_idle_watcher` background task.
+  `/health` returns `200 {"status":"ok","browser":"ready"|"absent"}` as soon
+  as the app is up — `browser` is informational, not a readiness gate (a 503
+  here would block `docker-entrypoint.sh`'s boot gate forever).
+- `_ensure_browser()` is the single-flight lazy launch: double-checked locking
+  on `_launch_lock` so N concurrent fetches when ABSENT launch exactly one
+  Firefox. Launch failure clears `_browser`/`_camoufox_ctx` to ABSENT and
+  re-raises → the caller records a `fetch_failed` and the next request retries.
+- `_teardown_browser_if_idle()` runs from `_idle_watcher` every
+  `IDLE_POLL_SECONDS` (30 s). It is a no-op while a fetch is in-flight
+  (`_active_fetches > 0`, checked unlocked then re-checked under the lock), so
+  a long navigation is never killed mid-flight. Teardown nulls the handles
+  **before** calling `__aexit__` so a concurrent fetch sees ABSENT and launches
+  fresh rather than reusing a browser being torn down.
+- `_active_fetches` is incremented in the `fetch` handler before
+  `_do_fetch` and decremented in a `finally` — it gates teardown, while the
+  semaphore still bounds concurrency (5).
+- Teardown is normal operation: it must **not** touch the
+  `_consecutive_failures` counter (only fetch success/failure does).
+
+Verified 2026-08-12 on a 1.95 GB image: at boot (browser absent) the
+container sits at ~320 MiB / <1.5% CPU; after a fetch the browser is resident
+at ~720 MiB; after the idle timeout it is reaped and RAM returns to ~310 MiB.
+Measured ~500 MiB idle savings vs. the old always-on lifespan launch.
+
+### Pattern: sidecar failure logging and degradation diagnostics
 shared `AsyncCamoufox` browser silently degraded and every `page.goto` raised.
 The pre-fix code logged only `str(exc)` (no exception class) and the
 `response is None` path logged nothing, so the root cause was invisible.

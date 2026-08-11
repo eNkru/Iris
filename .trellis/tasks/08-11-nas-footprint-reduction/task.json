@@ -1,0 +1,28 @@
+{
+  "id": "nas-footprint-reduction",
+  "name": "nas-footprint-reduction",
+  "title": "Iris NAS footprint reduction backlog",
+  "description": "Umbrella backlog of candidate improvements to reduce Iris container idle footprint on resource-constrained hosts (NAS). Owns the ranked candidate list and task map; children are spawned when an item is picked for implementation.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Howard Ju",
+  "assignee": "Howard Ju",
+  "createdAt": "2026-08-11",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-11-lazy-camoufox-browser"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
