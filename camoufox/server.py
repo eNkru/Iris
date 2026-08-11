@@ -28,11 +28,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 # `AsyncCamoufox` is the async context-manager client that launches the
@@ -85,6 +86,22 @@ RENDER_STABLE_SECONDS = 1.0
 CONTENT_RETRY_ATTEMPTS = 3
 CONTENT_RETRY_DELAY_SECONDS = 0.4
 
+# Idle teardown: the browser is torn down after this many seconds with no fetch
+# activity, so the resident Firefox process tree (~350-500 MB) is absent
+# between scrapes on resource-constrained hosts (e.g. a NAS). The default
+# 300 s (5 min) sits well below the scheduler's 60-min product poll interval,
+# so on a lightly-loaded host the browser launches for a scrape, sits idle for
+# 5 min, tears down, and relaunches ~an hour later — paying ~3-5 s cold-start
+# once per hour to keep ~500 MB free the other ~55 min. Tunable via env so a
+# host with many back-to-back scrapes can keep the browser warm (raise it) or
+# a host with sparse scrapes can reclaim faster (lower it).
+BROWSER_IDLE_TIMEOUT_SECONDS = float(
+    os.environ.get("CAMOUFOX_IDLE_TIMEOUT_SECONDS", "300")
+)
+# How often the idle watcher polls. 30 s balances teardown promptness against
+# trivial per-poll cost.
+IDLE_POLL_SECONDS = 30.0
+
 # Diagnostic threshold for shared-browser degradation (R5). Aligned with the
 # self-heal task's intended `HEAL_THRESHOLD` (3) so the rich "browser degraded"
 # summary fires at the same point a future self-heal would trigger — making the
@@ -97,9 +114,27 @@ _semaphore: asyncio.Semaphore | None = None
 # Playwright `Browser` which exposes `new_page()` / `new_context()`; the
 # context manager itself does not. We hold both so the lifespan can
 # exit/enter the context and the handler can call `new_page()` on the
-# yielded browser.
+# yielded browser. Under the lazy lifecycle both are None until the first
+# fetch; torn back to None after the idle timeout.
 _camoufox_ctx: AsyncCamoufox | None = None
 _browser: Browser | None = None
+# Single-flight lock for the lazy launch: when the browser is ABSENT and N
+# requests arrive concurrently, exactly one does the launch; the rest wait on
+# this lock and reuse the just-launched browser (double-checked locking).
+_launch_lock: asyncio.Lock | None = None
+# In-flight fetch counter so the idle watcher never tears down a browser while
+# a navigation is mid-flight. Incremented on fetch entry, decremented in a
+# finally. The semaphore bounds concurrency (5); this counter gates teardown.
+_active_fetches: int = 0
+# Monotonic timestamp of the last fetch entry, updated on every request. The
+# idle watcher tears down when `monotonic() - _last_activity_at` exceeds
+# BROWSER_IDLE_TIMEOUT_SECONDS and no fetch is in flight. Initialized to the
+# process start time so a freshly-started container with zero requests is
+# eligible for teardown-of-nothing (a no-op) rather than never running.
+_last_activity_at: float = time.monotonic()
+# Background task that polls for idle and tears the browser down. Created in
+# lifespan, cancelled on shutdown.
+_idle_task: asyncio.Task[None] | None = None
 # Consecutive-fetch-failure counter for the shared browser (R4). Incremented on
 # any failure (`goto` exception, `goto` timeout, `response is None`,
 # `new_page()` failure) and reset to 0 on any successful fetch. Surfaced in
@@ -196,6 +231,122 @@ def _traceback_repr(exc: BaseException) -> str:
     import traceback
 
     return repr(exc) + "\n" + "".join(traceback.format_exception(exc))
+
+
+async def _ensure_browser() -> Browser:
+    """Lazily launch the shared Camoufox browser, or return the live one.
+
+    Fast path: if `_browser` is already up, return it. Otherwise acquire the
+    launch lock (single-flight) and, after re-checking under the lock, enter a
+    fresh `AsyncCamoufox` context and store the yielded `Browser`. Concurrent
+    callers block on the lock and reuse the one launch — only one Firefox
+    process is ever spawned across simultaneous requests.
+
+    The `AsyncCamoufox(headless=True, os="linux")` config is identical to the
+    pre-change eager lifespan launch — same anti-detect fingerprint, same
+    pinned binary build. This changes *when* the browser comes up, not *what*
+    it is.
+
+    On any exception, the partial state is cleared (`_browser`/`_camoufox_ctx`
+    nulled) so the next request retries from a clean ABSENT state, and the
+    exception propagates to the caller's handler (which records a failure and
+    returns `fetch_failed`). The lock is released in a `finally` so an
+    abandoned waiter still gets to try.
+
+    Raises whatever `AsyncCamoufox.__aenter__` raises on launch failure.
+    """
+    global _camoufox_ctx, _browser
+    if _browser is not None:
+        return _browser
+    assert _launch_lock is not None, "sidecar not started — lifespan must run"
+    async with _launch_lock:
+        # Double-checked locking: another waiter may have launched the browser
+        # while we waited for the lock.
+        if _browser is not None:
+            return _browser
+        logger.info("Launching shared Camoufox browser (lazy, linux fingerprint)")
+        # The single deployed browser runs in a Linux container with only the
+        # Linux font set physically present; pin the fingerprint OS to linux so
+        # navigator.platform / fonts / fontconfig are always self-consistent (a
+        # mac/win fingerprint that names fonts which can't resolve locally is a
+        # fingerprinting tell). The image also prunes the macos/windows font dirs.
+        ctx = AsyncCamoufox(headless=True, os="linux")
+        try:
+            browser = await ctx.__aenter__()
+        except BaseException:
+            # Clear any half-set state so the next attempt starts clean. Do not
+            # call __aexit__ here: __aenter__ failed, so there is nothing to
+            # exit (the context manager was not entered).
+            _camoufox_ctx = None
+            _browser = None
+            raise
+        _camoufox_ctx = ctx
+        _browser = browser
+        logger.info("Camoufox browser ready")
+        return _browser
+
+
+async def _teardown_browser_if_idle() -> None:
+    """Tear the browser down after the idle timeout with no fetches in flight.
+
+    Called periodically by the idle watcher. No-op when the browser is already
+    absent, when the idle threshold has not elapsed, or when a fetch is
+    in-flight (so a long navigation is never killed mid-flight). Acquires the
+    launch lock so it cannot race a concurrent lazy launch: a fetch entering
+    between the idle check and the lock re-checks `_active_fetches` under the
+    lock and aborts the teardown.
+
+    Teardown is normal operation, never a fetch failure: it must not touch the
+    `_consecutive_failures` counter.
+    """
+    global _camoufox_ctx, _browser
+    if _browser is None:
+        return
+    if time.monotonic() - _last_activity_at < BROWSER_IDLE_TIMEOUT_SECONDS:
+        return
+    if _active_fetches > 0:
+        return
+    assert _launch_lock is not None, "sidecar not started — lifespan must run"
+    async with _launch_lock:
+        # Re-check under the lock: a fetch may have entered between the
+        # unlocked `_active_fetches` check above and acquiring the lock, and a
+        # launch may have raced.
+        if _browser is None or _active_fetches > 0:
+            return
+        if time.monotonic() - _last_activity_at < BROWSER_IDLE_TIMEOUT_SECONDS:
+            return
+        logger.info(
+            "Idle timeout reached (%.0fs), closing Camoufox browser",
+            BROWSER_IDLE_TIMEOUT_SECONDS,
+        )
+        ctx = _camoufox_ctx
+        # Null the handles first so a fetch arriving while __aexit__ runs sees
+        # ABSENT and launches fresh, rather than reusing a browser being torn
+        # down.
+        _browser = None
+        _camoufox_ctx = None
+    if ctx is not None:
+        try:
+            await ctx.__aexit__(None, None, None)
+        except Exception as exc:  # noqa: BLE001 — teardown failure must not crash the watcher
+            logger.warning(
+                "Camoufox browser teardown error error_type=%s error=%s",
+                _exc_type_name(exc),
+                str(exc),
+            )
+    logger.info("Camoufox browser closed (idle teardown)")
+
+
+async def _idle_watcher() -> None:
+    """Background loop that tears the browser down after the idle timeout.
+
+    Started in `lifespan`, cancelled on shutdown. Polls every
+    `IDLE_POLL_SECONDS`; the actual teardown decision and teardown work live in
+    `_teardown_browser_if_idle`.
+    """
+    while True:
+        await asyncio.sleep(IDLE_POLL_SECONDS)
+        await _teardown_browser_if_idle()
 
 
 async def _wait_for_render(page: object) -> None:
@@ -320,28 +471,49 @@ class FetchResponseFail(BaseModel):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Launch the shared Camoufox browser at startup, close it on shutdown."""
-    global _semaphore, _camoufox_ctx, _browser
+    """Start the sidecar: semaphore, launch lock, and idle watcher.
+
+    Unlike the old eager lifecycle, the browser is NOT launched here — it
+    launches lazily on the first fetch (`_ensure_browser`) and tears down after
+    the idle timeout (`_idle_watcher`). This keeps the Firefox process tree
+    absent between scrapes, so a NAS (or any lightly-loaded host) does not pay
+    ~500 MB for a resident browser that mostly sits idle.
+
+    On shutdown, cancel the idle watcher and tear the browser down if it
+    happens to be up.
+    """
+    global _semaphore, _launch_lock, _idle_task, _last_activity_at
     _semaphore = asyncio.Semaphore(SIDECAR_CONCURRENCY)
-    logger.info("Launching shared Camoufox browser (headless, linux fingerprint)")
-    # The single deployed browser runs in a Linux container with only the
-    # Linux font set physically present; pin the fingerprint OS to linux so
-    # navigator.platform / fonts / fontconfig are always self-consistent (a
-    # mac/win fingerprint that names fonts which can't resolve locally is a
-    # fingerprinting tell). The image also prunes the macos/windows font dirs.
-    _camoufox_ctx = AsyncCamoufox(headless=True, os="linux")
-    # `__aenter__` yields the `AsyncBrowser`; `new_page()` lives on it, not on
-    # the `AsyncCamoufox` context manager itself.
-    _browser = await _camoufox_ctx.__aenter__()
-    logger.info("Camoufox browser ready")
+    _launch_lock = asyncio.Lock()
+    _last_activity_at = time.monotonic()
+    _idle_task = asyncio.create_task(_idle_watcher())
+    logger.info(
+        "Sidecar ready (browser will launch on first fetch, idle teardown after %ss)",
+        BROWSER_IDLE_TIMEOUT_SECONDS,
+    )
     try:
         yield
     finally:
+        if _idle_task is not None:
+            _idle_task.cancel()
+            try:
+                await _idle_task
+            except asyncio.CancelledError:
+                pass
+        _idle_task = None
         if _camoufox_ctx is not None:
-            logger.info("Closing Camoufox browser")
-            await _camoufox_ctx.__aexit__(None, None, None)
+            logger.info("Closing Camoufox browser (shutdown)")
+            try:
+                await _camoufox_ctx.__aexit__(None, None, None)
+            except Exception as exc:  # noqa: BLE001 — shutdown cleanup must not mask exit
+                logger.warning(
+                    "Camoufox browser shutdown error error_type=%s error=%s",
+                    _exc_type_name(exc),
+                    str(exc),
+                )
         _camoufox_ctx = None
         _browser = None
+        _launch_lock = None
         _semaphore = None
 
 
@@ -349,28 +521,47 @@ app = FastAPI(title="Iris Camoufox sidecar", lifespan=lifespan)
 
 
 @app.get("/health", response_model=None)
-async def health() -> dict[str, str] | JSONResponse:
-    # The browser is launched eagerly in the lifespan, so readiness == the
-    # process being up past startup. Return 503 while starting so Compose
-    # `service_healthy` (and any external probe) does not treat a pre-ready
-    # process as healthy.
-    # `response_model=None` is required: FastAPI cannot generate a response
-    # model from a Union that includes starlette.Response (JSONResponse).
-    if _browser is None:
-        return JSONResponse({"status": "starting"}, status_code=503)
-    return {"status": "ok"}
+async def health() -> dict[str, str]:
+    # Under the lazy lifecycle the browser is absent at boot by design, so
+    # readiness can no longer gate on `_browser`. The *service* is ready as
+    # soon as the lifespan has set up the semaphore / lock / idle watcher —
+    # i.e. this handler runs. Whether the browser is currently resident is
+    # reported as an informational field so an operator can see it, but it is
+    # not a readiness gate: a 503 here would block `docker-entrypoint.sh`'s
+    # boot gate forever (the browser only launches on the first real fetch).
+    # `response_model=None` is kept so FastAPI does not generate a model from
+    # the dict return; the shape is stable and trivial.
+    return {"status": "ok", "browser": "ready" if _browser is not None else "absent"}
 
 
 @app.post("/v1/fetch")
 async def fetch(request: FetchRequest) -> FetchResponseOk | FetchResponseFail:
-    assert _semaphore is not None and _browser is not None, (
+    assert _semaphore is not None and _launch_lock is not None, (
         "sidecar not started — lifespan must run before requests"
     )
+    global _active_fetches, _last_activity_at
+    _last_activity_at = time.monotonic()
+    _active_fetches += 1
+    try:
+        return await _do_fetch(request)
+    finally:
+        _active_fetches -= 1
+
+
+async def _do_fetch(
+    request: FetchRequest,
+) -> FetchResponseOk | FetchResponseFail:
+    """Inner fetch body; called by `fetch` once in-flight accounting is set up."""
     async with _semaphore:
         try:
+            # Lazily launch the browser if it is absent (single-flight across
+            # concurrent callers). On launch failure this raises, flows to the
+            # handler below (records a failure, returns fetch_failed), and the
+            # next request retries from ABSENT.
+            browser = await _ensure_browser()
             # `new_page` on the shared browser gives a fresh page (no cookie /
             # storage leak between retailers) that we close in a `finally`.
-            page = await _browser.new_page()
+            page = await browser.new_page()
             try:
                 response = await page.goto(
                     request.url,
