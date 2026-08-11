@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-08-08
+- **Total Sessions**: 10
+- **Last Active**: 2026-08-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~383 | Active |
+| `journal-1.md` | ~416 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-08-12 | On-demand camoufox browser lifecycle | `d879392` | `main` |
 | 9 | 2026-08-08 | Finish UI professional polish + repo/issues links | `534b1ca`, `9c3b195` | `main` |
 | 8 | 2026-08-07 | SPA price extraction: wait for JS-rendered content | `4ebc8bc` | `spa-price-extraction` |
 | 7 | 2026-08-07 | Camoufox sidecar diagnostic logging | `7b3752b` | `camoufox-sidecar-diagnose` |

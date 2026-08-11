@@ -381,3 +381,36 @@ Completed the Professional UI polish task: heavier visual redesign (AppShell wit
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: On-demand camoufox browser lifecycle
+
+**Date**: 2026-08-12
+**Task**: On-demand camoufox browser lifecycle
+**Branch**: `main`
+
+### Summary
+
+Replaced the camoufox sidecar's always-on Firefox (eager lifespan launch, ~823 MiB idle) with a lazy lifecycle: browser launches on the first fetch via single-flight double-checked locking on an asyncio.Lock, and is torn down after a configurable idle timeout (BROWSER_IDLE_TIMEOUT_SECONDS, default 300s, env CAMOUFOX_IDLE_TIMEOUT_SECONDS) by an idle-watcher task when no fetches are in-flight. /health now returns 200 {status:ok, browser:ready|absent} so the entrypoint boot gate passes without a resident browser. Anti-detect capability unchanged (same AsyncCamoufox headless linux config). Verified on the 1.95GB image: idle RAM 823->310 MiB (~500 MiB saved), browser absent at boot, lazy-launched on fetch, reaped after idle, single-flight confirmed across two concurrent fetches. Also added the NAS footprint-reduction backlog cataloging all Tier A-D candidate improvements for later pickup, and a performance.md spec note documenting the lazy lifecycle contract.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d879392` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
