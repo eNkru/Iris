@@ -1,15 +1,13 @@
-"use client";
+import { AdminSettingsSection } from "../components/admin-settings-section";
+import { AppShell } from "../components/app-shell";
+import { AuthGate } from "../components/auth-gate";
+import { ChannelsSection } from "../components/channels-section";
+import { UserSettingsSection } from "../components/user-settings-section";
+import { Card, PageHeader } from "../components/ui";
+import { useSession } from "../hooks/use-session";
+import { useI18n } from "../lib/i18n";
 
-import { AdminSettingsSection } from "../../components/admin-settings-section";
-import { AppShell } from "../../components/app-shell";
-import { AuthGate } from "../../components/auth-gate";
-import { ChannelsSection } from "../../components/channels-section";
-import { UserSettingsSection } from "../../components/user-settings-section";
-import { Card, PageHeader } from "../../components/ui";
-import { useSession } from "../../hooks/use-session";
-import { useI18n } from "../../lib/i18n";
-
-export default function SettingsPage() {
+export function SettingsPage() {
   const { t } = useI18n();
   const { user } = useSession();
   const isAdmin = user?.role === "admin";

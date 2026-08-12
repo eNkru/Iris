@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Verify no `!`, `any`, `@ts-expect-error`, or console.log in the new server.ts/main.tsx/routes/vite.config.ts."}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Confirm type annotations and Zod-first patterns are preserved; no duplicate type definitions introduced."}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Frontend pre-commit checklist — typecheck, build, lint, and the no-Next-imports grep gate."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type safety verification for ported routes/providers; ensure oRPC generated query keys and backend type imports are intact."}
+{"file": ".trellis/spec/frontend/authentication.md", "reason": "Verify the three-layer auth gate (Hono guard → client AuthGuard → protectedProcedure) still holds after migration."}
+{"file": ".trellis/spec/frontend/orpc-usage.md", "reason": "Confirm oRPC client calls and React Query hooks still resolve against /api/rpc on the Hono server."}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Backend pre-commit checklist — applies to server.ts (the new Node entry) and the mounted handlers."}
+{"file": ".trellis/spec/backend/orpc-usage.md", "reason": "Verify RPCHandler is mounted with the correct prefix/context on Hono, matching the prior Next route handler contract."}

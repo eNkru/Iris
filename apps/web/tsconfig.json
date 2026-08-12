@@ -2,12 +2,32 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "ES2022"],
-    "allowJs": true,
     "noEmit": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
-    "plugins": [{ "name": "next" }]
+    "types": ["vite/client", "node"],
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@iris/auth/client": ["../../packages/auth/src/client.ts"],
+      "@iris/auth": ["../../packages/auth/src/index.ts"],
+      "@iris/api/orpc/router": ["../../packages/api/src/orpc/router.ts"],
+      "@iris/api/orpc/procedures": ["../../packages/api/src/orpc/procedures.ts"],
+      "@iris/api": ["../../packages/api/src/index.ts"],
+      "@iris/database/drizzle/schema/auth": ["../../packages/database/src/drizzle/schema/auth.ts"],
+      "@iris/database/drizzle/schema/sqlite": ["../../packages/database/src/drizzle/schema/sqlite.ts"],
+      "@iris/database/drizzle/schema": ["../../packages/database/src/drizzle/schema/index.ts"],
+      "@iris/database/drizzle/queries": ["../../packages/database/src/drizzle/queries/index.ts"],
+      "@iris/database/drizzle/client": ["../../packages/database/src/drizzle/client.ts"],
+      "@iris/database": ["../../packages/database/src/index.ts"],
+      "@iris/prices/pipeline": ["../../packages/prices/src/pipeline/index.ts"],
+      "@iris/prices/scheduler": ["../../packages/prices/src/scheduler/scheduler.ts"],
+      "@iris/prices/notifications": ["../../packages/prices/src/notifications/index.ts"],
+      "@iris/prices": ["../../packages/prices/src/index.ts"],
+      "@iris/utils/enum-types": ["../../packages/utils/src/lib/enum-types.ts"],
+      "@iris/utils": ["../../packages/utils/src/index.ts"]
+    }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "next.config.ts"]
+  "include": ["src", "server.ts", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "dist-server"]
 }

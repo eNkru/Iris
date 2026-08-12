@@ -17,10 +17,14 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| next | ^15.x | React framework for production |
+| vite | ^6.x | SPA build tool (replaces Next.js) |
+| hono | ^4.x | Production HTTP server (replaces Next.js runtime) |
 | react | ^19.x | UI library |
 | react-dom | ^19.x | React DOM renderer |
+| react-router | ^7.x | Client-side routing (replaces Next App Router) |
 | typescript | ^5.x | TypeScript language |
+| esbuild | ^0.25.x | Server bundle (server.ts → dist-server/server.cjs) |
+| tsx | ^4.x | Dev-time TS execution for server.ts |
 
 ---
 

@@ -12,9 +12,7 @@ Complete this checklist before committing frontend code changes.
 
 ## Component Development
 
-- [ ] Server Components used by default; `'use client'` only when necessary
 - [ ] Semantic HTML elements used (button, not div for clicks)
-- [ ] `next/image` used instead of `<img>` tags
 - [ ] Proper ARIA labels and accessibility attributes added
 - [ ] Props have TypeScript interfaces defined
 
@@ -51,6 +49,7 @@ Complete this checklist before committing frontend code changes.
 ## Code Quality
 
 - [ ] No console.log statements left in code
+- [ ] No `next/*`, `better-auth/next-js`, or `nuqs/adapters/next` imports (framework is Vite + Hono)
 - [ ] Unused imports removed
 - [ ] Components follow single responsibility principle
 - [ ] File and function names follow conventions
@@ -68,19 +67,19 @@ Complete this checklist before committing frontend code changes.
 
 ```bash
 # Type check
-pnpm type-check
+pnpm --filter @iris/web typecheck
 
 # Lint
-pnpm lint
+pnpm --filter @iris/web lint
 
-# Format
-pnpm format
+# Build client (Vite)
+pnpm --filter @iris/web build
 
-# Build (catches production-only issues)
-pnpm build
+# Build server (esbuild → dist-server/server.cjs)
+pnpm --filter @iris/web server:build
 
 # Run all checks
-pnpm lint && pnpm type-check && pnpm build
+pnpm --filter @iris/web lint && pnpm --filter @iris/web typecheck && pnpm --filter @iris/web build
 ```
 
 ## Common Issues to Watch
@@ -109,8 +108,7 @@ queryClient.setQueryData<UserListData>(['users'], (old) => ...)
 <img src="/hero.jpg" alt="Hero" />
 
 // Good
-import Image from 'next/image';
-<Image src="/hero.jpg" alt="Hero" width={1200} height={600} />
+<img src="/hero.jpg" alt="Hero" width={1200} height={600} loading="lazy" />
 ```
 
 ### Layout

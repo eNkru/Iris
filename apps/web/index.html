@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" suppressHydrationWarning>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Iris — Price Tracker</title>
+    <script>
+      // Apply the stored theme class before hydration to prevent a light-mode
+      // flash (FOUC) for dark-mode users. Mirrors the inline script that was
+      // in app/layout.tsx <head>.
+      (function () {
+        try {
+          var t = localStorage.getItem("iris.theme");
+          var d = t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (d) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-900 antialiased selection:bg-[var(--accent-muted)] selection:text-slate-900 dark:bg-slate-950 dark:text-slate-100 dark:selection:text-slate-50">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
