@@ -1,14 +1,16 @@
 # Next.js Frontend Development Guidelines
 
-> Universal frontend development guidelines for Next.js full-stack applications with React + TypeScript + TailwindCSS.
+> Universal frontend development guidelines for React SPA applications with Vite + Hono + TypeScript + TailwindCSS.
 
 ## Tech Stack
 
-- **Framework**: Next.js 15, React 19
+- **Build**: Vite 6 (SPA), esbuild (server bundle)
+- **Server**: Hono 4 (production HTTP entry — replaces Next.js runtime)
+- **Routing**: React Router 7 (client-side, replaces Next App Router)
 - **Language**: TypeScript (strict mode)
 - **Styling**: TailwindCSS 4, Radix UI
 - **API**: oRPC (OpenAPI RPC), React Query (TanStack Query)
-- **URL State**: nuqs
+- **URL State**: nuqs (generic React adapter)
 - **Auth**: better-auth
 - **AI**: Vercel AI SDK (@ai-sdk/react)
 
@@ -69,9 +71,7 @@
 
 | Rule                                                         | Reference                                          |
 | ------------------------------------------------------------ | -------------------------------------------------- |
-| **Default to Server Components**                             | [components.md](./components.md)                   |
-| **Use `<button>` for clickable actions, not `<div>`**        | [components.md](./components.md)                   |
-| **Always use `next/image` instead of `<img>`**               | [components.md](./components.md)                   |
+| **Use semantic HTML (`<button>`, not `<div>` for clicks)**   | [components.md](./components.md)                   |
 | **Import types from backend, never redefine them**           | [type-safety.md](./type-safety.md)                 |
 | **No `any` types or `@ts-expect-error` in new code**         | [type-safety.md](./type-safety.md)                 |
 | **Use oRPC client for API calls (not raw fetch)**            | [orpc-usage.md](./orpc-usage.md)                   |
@@ -80,6 +80,7 @@
 | **Use `items-stretch` on main flex containers**              | [css-layout.md](./css-layout.md)                   |
 | **Handle both tool call formats (streaming + history)**      | [ai-sdk-integration.md](./ai-sdk-integration.md)   |
 | **Always check session loading state before rendering**      | [authentication.md](./authentication.md)           |
+| **No `next/*` imports (framework is Vite + Hono)**           | [deployment.md](./deployment.md)                   |
 
 ---
 

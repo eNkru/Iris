@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "08-11-lazy-camoufox-browser"
+    "08-11-lazy-camoufox-browser",
+    "08-12-lighter-web-framework"
   ],
   "parent": null,
   "relatedFiles": [],

@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Mandatory rules (no `!`, no `any`, no console.log) for all new code: server.ts, main.tsx, routes, vite.config.ts."}
+{"file": ".trellis/spec/shared/dependencies.md", "reason": "Dependency management conventions — directly relevant since we add Vite/Hono/React Router/tsx/esbuild and remove Next + @next/*."}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "TypeScript best practices for the new client entry, server, and route files."}
+{"file": ".trellis/spec/frontend/authentication.md", "reason": "better-auth client + session + protected-route patterns. The auth gate moves from Next middleware to a Hono server guard + client AuthGuard."}
+{"file": ".trellis/spec/frontend/orpc-usage.md", "reason": "oRPC client + React Query contract (unchanged by design). Confirms the client/porting surface and RPCHandler mounting expectations."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "React Context (i18n/theme/session) and URL state. nuqs adapter swaps from next/app to react; providers move to main.tsx."}
+{"file": ".trellis/spec/frontend/components.md", "reason": "React component conventions (semantic HTML, client components). App Router RSC rules no longer apply but component patterns carry over."}
+{"file": ".trellis/spec/frontend/css-layout.md", "reason": "Tailwind v4 + dark mode var patterns — unchanged by the migration, needed when porting layout shell to client root."}
+{"file": ".trellis/spec/frontend/deployment.md", "reason": "Instrumentation/edge-runtime guard pattern — the scheduler bootstrap (startScheduler/stopScheduler) moves from instrumentation.ts to server.ts lifecycle hooks."}
+{"file": ".trellis/spec/backend/orpc-usage.md", "reason": "oRPC router/procedure/middleware patterns — needed to mount RPCHandler correctly on Hono with the same prefix/context."}
+{"file": ".trellis/spec/backend/authentication.md", "reason": "better-auth server-side config + protected procedures. Confirms auth.handler is framework-agnostic and how sessions are checked server-side."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Migration spans client (routes/providers), server (server.ts), and Docker — cross-layer thinking prevents broken contracts at each boundary."}
+{"file": ".trellis/spec/guides/pre-implementation-checklist.md", "reason": "Pre-implementation readiness checklist before writing the new server/client entry points."}

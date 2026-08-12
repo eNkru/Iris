@@ -18,4 +18,4 @@ while ! wget -qO- http://127.0.0.1:8000/health >/dev/null 2>&1; do
 done
 
 echo "[iris] starting web server and scheduler"
-exec pnpm --filter @iris/web start
+exec node apps/web/dist-server/server.cjs

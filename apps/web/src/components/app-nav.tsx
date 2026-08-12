@@ -1,8 +1,8 @@
 "use client";
 
 import { authClient } from "@iris/auth/client";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "../hooks/use-session";
 import { useI18n } from "../lib/i18n";
 import { BrandMark } from "./brand-mark";
@@ -14,17 +14,24 @@ import { ButtonSecondary } from "./ui";
  * Sticky top navigation for authenticated pages: brand monogram + app links +
  * user email + sign out. Theme + language toggles live in the right cluster.
  * Project repo/issues links intentionally live only in the footer.
+ *
+ * Navigation swaps: `next/navigation` `usePathname`/`useRouter` and
+ * `next/link` `<Link href>` → React Router `useLocation().pathname`/
+ * `useNavigate` and `<Link to>`. `router.refresh()` (no SPA equivalent) is
+ * replaced by `queryClient.clear()` (drops cached session/user data) then
+ * `navigate("/login")`.
  */
 export function AppNav() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname = useLocation().pathname;
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, loaded } = useSession();
   const { t } = useI18n();
 
   const handleSignOut = async () => {
     await authClient.signOut();
-    router.push("/login");
-    router.refresh();
+    queryClient.clear();
+    navigate("/login", { replace: true });
   };
 
   const navLink = (href: string, label: string) => {
@@ -36,7 +43,7 @@ export function AppNav() {
         : pathname === href || pathname.startsWith(href);
     return (
       <Link
-        href={href}
+        to={href}
         className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-950 ${
           active
             ? "bg-[var(--accent-muted)] text-[var(--accent)]"
@@ -53,7 +60,7 @@ export function AppNav() {
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
         <div className="flex min-w-0 items-center gap-1">
           <Link
-            href="/"
+            to="/"
             className="mr-2 inline-flex items-center gap-2 rounded-lg text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:text-slate-100 dark:focus-visible:ring-offset-slate-950"
           >
             <BrandMark className="h-7 w-7" decorative />

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "react-router";
 import { useState } from "react";
 import {
   useCheckNow,
@@ -188,7 +188,7 @@ export function ProductList() {
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  href={`/products/${product.id}`}
+                  to={`/products/${product.id}`}
                   className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${
                     product.active
                       ? "text-slate-900 dark:text-slate-100"

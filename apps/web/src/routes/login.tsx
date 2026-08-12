@@ -1,12 +1,10 @@
-"use client";
-
 import { authClient } from "@iris/auth/client";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState, type FormEvent } from "react";
-import { ProjectLinks } from "../../components/app-footer";
-import { BrandMark } from "../../components/brand-mark";
-import { LanguageToggle } from "../../components/language-toggle";
-import { ThemeToggle } from "../../components/theme-toggle";
+import { useSearchParams } from "react-router";
+import { useState, type FormEvent } from "react";
+import { ProjectLinks } from "../components/app-footer";
+import { BrandMark } from "../components/brand-mark";
+import { LanguageToggle } from "../components/language-toggle";
+import { ThemeToggle } from "../components/theme-toggle";
 import {
   Button,
   ButtonSecondary,
@@ -14,12 +12,12 @@ import {
   ErrorBox,
   Input,
   Label,
-} from "../../components/ui";
-import { useI18n } from "../../lib/i18n";
+} from "../components/ui";
+import { useI18n } from "../lib/i18n";
 
 function LoginForm() {
   const { t } = useI18n();
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "/";
 
   const [email, setEmail] = useState("");
@@ -98,7 +96,7 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+export function LoginPage() {
   const { t } = useI18n();
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 dark:bg-slate-950 sm:p-8">
@@ -120,9 +118,7 @@ export default function LoginPage() {
               {t("login.tagline")}
             </p>
           </div>
-          <Suspense fallback={null}>
-            <LoginForm />
-          </Suspense>
+          <LoginForm />
         </Card>
 
         <div className="flex flex-col items-center gap-2 text-center">

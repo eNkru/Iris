@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Iris all-in-one image: Next.js + scheduler + Camoufox on one volume-backed container.
+# Iris all-in-one image: Hono server + Vite SPA + scheduler + Camoufox on one volume-backed container.
 FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -75,14 +75,18 @@ RUN python3 -m venv /opt/camoufox \
     # fontconfig/linux/fonts.conf; the macos/windows TTCs are dead weight and
     # gzip poorly, so prune them here rather than carry them through the build.
     && rm -rf /root/.cache/camoufox/browsers/official/*/fonts/macos \
-    && rm -rf /root/.cache/camoufox/browsers/official/*/fonts/windows \
+    && rm -rf /root/.cache/camoufox/browsers/official/*/fonts/windows
     # `COPY . .` later supersedes /app sources; the pre-install copies above
-    # were only for `pnpm install`, so drop them to keep this layer lean.
-    && rm -rf apps packages
+    # were only for `pnpm install`. We do NOT `rm -rf apps packages` here
+    # because that would also destroy the package-level node_modules symlinks
+    # pnpm created (e.g. packages/auth/node_modules/better-auth). Those
+    # symlinks are needed by Vite to resolve bare imports from workspace
+    # source files. The .dockerignore excludes node_modules from `COPY . .`,
+    # so the symlinks must survive this layer.
 
 COPY . .
 
-# Server-only modules validate their environment while Next builds.
+# Server-only modules validate their environment while the server builds.
 ARG DATABASE_PATH=/app/data/iris.db
 ARG CAMOUFOX_SIDECAR_URL=http://127.0.0.1:8000
 ENV DATABASE_PATH=${DATABASE_PATH}
@@ -90,7 +94,7 @@ ENV CAMOUFOX_SIDECAR_URL=${CAMOUFOX_SIDECAR_URL}
 ENV NODE_ENV=production
 
 RUN pnpm --filter @iris/web build \
-    && rm -rf apps/web/.next/cache \
+    && pnpm --filter @iris/web server:build \
     && rm -rf /root/.cache/pnpm \
     && rm -rf /app/data
 

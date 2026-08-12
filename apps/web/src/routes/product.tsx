@@ -1,14 +1,11 @@
-"use client";
-
-import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useState } from "react";
-import { useCheckNow, useProduct } from "../../../hooks/use-products";
-import { AppShell } from "../../../components/app-shell";
-import { AuthGate } from "../../../components/auth-gate";
-import { PriceChart } from "../../../components/price-chart";
-import { ProductEditForm } from "../../../components/product-edit-form";
-import { useI18n } from "../../../lib/i18n";
+import { Link, useParams } from "react-router";
+import { useCheckNow, useProduct } from "../hooks/use-products";
+import { AppShell } from "../components/app-shell";
+import { AuthGate } from "../components/auth-gate";
+import { PriceChart } from "../components/price-chart";
+import { ProductEditForm } from "../components/product-edit-form";
+import { useI18n } from "../lib/i18n";
 import {
   Badge,
   ButtonSecondary,
@@ -18,9 +15,9 @@ import {
   formatDateTime,
   formatPrice,
   formatRelativeTime,
-} from "../../../components/ui";
+} from "../components/ui";
 
-export default function ProductDetailPage() {
+export function ProductDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
@@ -49,7 +46,7 @@ export default function ProductDetailPage() {
           />
           <div className="mt-4">
             <Link
-              href="/"
+              to="/"
               className="text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
             >
               {t("detail.back")}
@@ -67,7 +64,7 @@ export default function ProductDetailPage() {
       <AppShell mainClassName="space-y-6">
         <div className="space-y-3">
           <Link
-            href="/"
+            to="/"
             className="inline-flex text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
           >
             {t("detail.back")}
