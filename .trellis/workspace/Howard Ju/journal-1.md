@@ -414,3 +414,36 @@ Replaced the camoufox sidecar's always-on Firefox (eager lifespan launch, ~823 M
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Throttle OpenCode Zen extraction (429 fix)
+
+**Date**: 2026-08-13
+**Task**: Throttle OpenCode Zen extraction (429 fix)
+**Branch**: `main`
+
+### Summary
+
+Added a process-wide pLimit(1) + 2s min-interval + 429 exponential-backoff throttle around both generateText call sites in aiExtractPrice so free-tier Zen 429s stop failing scheduler ticks and add-product. Disabled the AI SDK default retries (maxRetries: 0 via generateTextThrottled) so they cannot burst the quota before our backoff runs. Introduced a thin ./ai-sdk re-export so unit tests can mock generateText (Vite externalizes packages/prices/node_modules/ai, making vi.mock('ai') a no-op). Added AI_EXTRACT_CONCURRENCY (default 1) and AI_EXTRACT_MIN_INTERVAL_MS (default 2000) env knobs in env.ts and .env.example. New tests/unit/ai-extract.test.ts asserts overlapping extracts serialize and a first-call 429 is retried then succeeds. vitest.config.ts moved resolve.alias to vite-level so @iris/utils etc. resolve in unit tests. Updated .trellis/spec/backend/ai-sdk-integration.md with a 7-section Scenario contract (signatures, env table, error matrix, good/base/bad, tests, wrong vs correct) plus the ai-sdk mockability gotcha, and added a cross-reference in performance.md. trellis-check passed all ACs; typecheck, lint, unit + sidecar-fetch tests green. Merged via PR #15.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `377431c` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
