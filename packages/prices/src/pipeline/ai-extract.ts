@@ -1,10 +1,15 @@
-import { generateText, jsonSchema, tool } from "ai";
-import type { LanguageModel } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import pLimit from "p-limit";
+import { z } from "zod";
 import { getEnv, logger } from "@iris/utils";
 import type { AiModelOverride } from "@iris/utils";
 import type { GlobalSettingsRow } from "@iris/database/drizzle/queries";
-import { z } from "zod";
+import {
+  generateText,
+  jsonSchema,
+  tool,
+  createOpenAICompatible,
+  type LanguageModel,
+} from "./ai-sdk";
 import { priceExtractionSchema, type PriceExtraction } from "./types";
 import { fetchPage } from "./fetch-page";
 
@@ -195,6 +200,124 @@ function parseExtractionJson(text: string): PriceExtraction {
   return parsed.data;
 }
 
+const AI_EXTRACT_MAX_RETRIES = 3;
+
+/**
+ * Limiter + min-interval gap for Zen `generateText`.
+ *
+ * Concurrency is read from `getEnv()` but captured once on first use (the
+ * limiter is memoized), so it is effectively boot-time configuration — an
+ * operator changing `AI_EXTRACT_CONCURRENCY` without a restart has no effect.
+ * The min-interval gap, by contrast, is read on every call, so
+ * `AI_EXTRACT_MIN_INTERVAL_MS` is live-tunable.
+ */
+let aiExtractLimiter: ReturnType<typeof pLimit> | null = null;
+
+function getAiExtractLimiter(): ReturnType<typeof pLimit> {
+  if (aiExtractLimiter === null) {
+    aiExtractLimiter = pLimit(getEnv().AI_EXTRACT_CONCURRENCY);
+  }
+  return aiExtractLimiter;
+}
+
+let lastZenCallEndedAt = 0;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRateLimitError(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
+    if (candidate.status === 429 || candidate.code === 429) {
+      return true;
+    }
+    if (typeof candidate.message === "string" && /rate limit/i.test(candidate.message)) {
+      return true;
+    }
+  }
+  return /rate limit/i.test(String(error));
+}
+
+function calculateRateLimitDelay(attempt: number): number {
+  return 2 ** attempt * 1000 + Math.random() * 1000;
+}
+
+async function waitForMinInterval(): Promise<void> {
+  const elapsed = Date.now() - lastZenCallEndedAt;
+  const remaining = getEnv().AI_EXTRACT_MIN_INTERVAL_MS - elapsed;
+  if (remaining > 0) {
+    await sleep(remaining);
+  }
+}
+
+/**
+ * Reset the module-level throttle state. For tests only: clears the memoized
+ * limiter (so a new concurrency value takes effect) and the min-interval
+ * clock. Production never calls this.
+ *
+ * @internal
+ */
+export function __resetAiExtractThrottle(): void {
+  aiExtractLimiter = null;
+  lastZenCallEndedAt = 0;
+}
+
+async function withAiLimit<T>(
+  fn: () => Promise<T>,
+  context: { productId?: string; url: string },
+): Promise<T> {
+  return getAiExtractLimiter()(() => runWithMinIntervalAndRetry(fn, context));
+}
+
+/**
+ * Every Zen `generateText` goes through the shared limiter. `maxRetries: 0`
+ * disables the AI SDK's default 2 immediate retries — those would burst the
+ * free-tier quota before our 429 backoff can run.
+ */
+async function generateTextThrottled(
+  options: Parameters<typeof generateText>[0],
+  context: { productId?: string; url: string },
+) {
+  return withAiLimit(() => generateText({ ...options, maxRetries: 0 }), context);
+}
+
+async function runWithMinIntervalAndRetry<T>(
+  fn: () => Promise<T>,
+  context: { productId?: string; url: string },
+): Promise<T> {
+  for (let attempt = 1; attempt <= AI_EXTRACT_MAX_RETRIES; attempt++) {
+    await waitForMinInterval();
+    try {
+      const result = await fn();
+      lastZenCallEndedAt = Date.now();
+      return result;
+    } catch (error) {
+      lastZenCallEndedAt = Date.now();
+      if (isRateLimitError(error) && attempt < AI_EXTRACT_MAX_RETRIES) {
+        const delay = calculateRateLimitDelay(attempt);
+        logger.warn("Rate limited, retrying", {
+          operation: "aiExtractPrice",
+          productId: context.productId,
+          url: context.url,
+          attempt,
+          delay: Math.round(delay),
+        });
+        await sleep(delay);
+        continue;
+      }
+      // Terminal attempt, or a non-rate-limit error: surface it. The loop has
+      // no fall-through path — every iteration returns or throws — so there is
+      // no need for a trailing `throw new Error("Failed after N attempts")`.
+      throw error;
+    }
+  }
+  // Unreachable: the loop body always returns or throws. Kept for exhaustiveness.
+  throw new Error(`Failed after ${AI_EXTRACT_MAX_RETRIES} attempts`);
+}
+
 /**
  * Preferred extraction path: page HTML is already in hand (from `fetchPage` /
  * the Camoufox sidecar). Single `generateText` call, no tools — avoids the
@@ -208,19 +331,22 @@ async function extractFromPageContent(
   productId: string | undefined,
 ): Promise<PriceExtraction> {
   const pageContent = reducePageHtml(html);
-  const result = await generateText({
-    model,
-    prompt: buildPageContentExtractionPrompt(url, pageContent),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: "prices.extract",
-      metadata: {
-        productId: productId ?? "",
-        url,
-        path: "preloaded-html",
+  const result = await generateTextThrottled(
+    {
+      model,
+      prompt: buildPageContentExtractionPrompt(url, pageContent),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "prices.extract",
+        metadata: {
+          productId: productId ?? "",
+          url,
+          path: "preloaded-html",
+        },
       },
     },
-  });
+    { productId, url },
+  );
 
   return parseExtractionJson(result.text);
 }
@@ -238,23 +364,26 @@ async function extractWithFetchTool(
   url: string,
   productId: string | undefined,
 ): Promise<PriceExtraction> {
-  const result = await generateText({
-    model,
-    maxSteps: 5,
-    tools: {
-      fetchPage: buildFetchPageTool(),
-    },
-    prompt: buildToolExtractionPrompt(url),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: "prices.extract",
-      metadata: {
-        productId: productId ?? "",
-        url,
-        path: "fetch-tool",
+  const result = await generateTextThrottled(
+    {
+      model,
+      maxSteps: 5,
+      tools: {
+        fetchPage: buildFetchPageTool(),
+      },
+      prompt: buildToolExtractionPrompt(url),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "prices.extract",
+        metadata: {
+          productId: productId ?? "",
+          url,
+          path: "fetch-tool",
+        },
       },
     },
-  });
+    { productId, url },
+  );
 
   return parseExtractionJson(result.text);
 }

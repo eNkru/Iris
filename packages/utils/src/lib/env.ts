@@ -30,6 +30,8 @@ export const envSchema = z.object({
   AI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   AI_API_KEY: z.string().default(""),
   AI_MODEL: z.string().default("gpt-4o-mini"),
+  AI_EXTRACT_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  AI_EXTRACT_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(2_000),
 
   // Telegram alert channel
   TELEGRAM_BOT_TOKEN: z.string().default(""),
