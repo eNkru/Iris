@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/performance.md", "reason": "Shared limiter + 429 exponential-backoff contract the extract helper must match"}
+{"file": ".trellis/spec/backend/ai-sdk-integration.md", "reason": "generateText extraction path, never-throw contract, rate-limit error table"}
+{"file": ".trellis/spec/backend/logging.md", "reason": "Structured warn on retry; error on exhausted attempts"}

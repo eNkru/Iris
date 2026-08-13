@@ -43,6 +43,9 @@ Config lives in `packages/utils/src/lib/env.ts` (`AI_BASE_URL`, `AI_API_KEY`,
 AI_BASE_URL="https://api.openai.com/v1"   # any OpenAI-compatible endpoint
 AI_API_KEY=""                              # empty → provider degrades to null
 AI_MODEL="gpt-4o-mini"
+# Optional extraction throttle (defaults shown). Process-wide; no admin UI.
+# AI_EXTRACT_CONCURRENCY=1
+# AI_EXTRACT_MIN_INTERVAL_MS=2000
 ```
 
 ## 1a. CRITICAL: `ai@4.x` + zod v4 incompatibility
@@ -310,6 +313,107 @@ Never throw out of the AI path — every failure (missing key, AI error, schema
 mismatch) is logged and `null` is returned so the pipeline records a failed
 check instead of crashing.
 
+### Scenario: Extraction throttle (shared limiter + 429 backoff)
+
+#### 1. Scope / Trigger
+
+Free-tier OpenCode Zen (`deepseek-v4-flash-free`) 429s when a scheduler tick
+(`DEFAULT_CONCURRENCY = 5`) and add-product / check-now all fire
+`generateText` in the same second. The throttle is an env-wired, process-wide
+contract around every Zen call. Page fetch stays at `pLimit(5)`.
+
+#### 2. Signatures
+
+```ts
+// packages/prices/src/pipeline/ai-extract.ts
+const AI_EXTRACT_MAX_RETRIES = 3;
+
+async function generateTextThrottled(
+  options: Parameters<typeof generateText>[0],
+  context: { productId?: string; url: string },
+): Promise<GenerateTextResult>;
+// always spreads `{ ...options, maxRetries: 0 }` then withAiLimit
+
+async function withAiLimit<T>(
+  fn: () => Promise<T>,
+  context: { productId?: string; url: string },
+): Promise<T>;
+// pLimit(AI_EXTRACT_CONCURRENCY) → runWithMinIntervalAndRetry
+
+// packages/utils/src/lib/env.ts
+AI_EXTRACT_CONCURRENCY: z.coerce.number().int().positive().default(1)
+AI_EXTRACT_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(2_000)
+```
+
+Limiter is created lazily on first use from `getEnv()` and cached for the
+process. Mid-process env changes are ignored (boot-time knobs).
+
+#### 3. Contracts
+
+| Key | Required | Default | Constraint |
+| --- | --- | --- | --- |
+| `AI_EXTRACT_CONCURRENCY` | no | `1` | positive int; in-flight Zen calls |
+| `AI_EXTRACT_MIN_INTERVAL_MS` | no | `2000` | nonnegative int; gap after each attempt (success or fail) |
+
+No admin UI. Scheduler / add-product / check-now share one limiter.
+
+`isRateLimitError`: `status === 429` or `code === 429` or `/rate limit/i` on
+`message` (Zen's `Console` wrapper may not set 429 on the outer error).
+
+Backoff: `2 ** attempt * 1000 + random * 1000`. Log
+`Rate limited, retrying` with `operation: "aiExtractPrice"`, `productId`,
+`url`, `attempt`, `delay` (rounded). 429 backoff holds the limiter slot.
+
+Import `generateText` / `createOpenAICompatible` from `./ai-sdk`, not `ai`.
+Vite externalizes `packages/prices/node_modules/ai`, so `vi.mock("ai")` is a
+no-op and would hit the real provider.
+
+#### 4. Validation & Error Matrix
+
+| condition | generateText | log | `aiExtractPrice` |
+| --- | --- | --- | --- |
+| success | 1 call, `maxRetries: 0` | none | parsed extraction |
+| 429 / `/rate limit/i`, attempt &lt; 3 | retry after backoff | `warn` `Rate limited, retrying` | continue |
+| 429 exhausted (3 attempts) | throw to outer catch | existing `error` `AI price extraction failed` | `null` |
+| non-429 error | no retry | existing `error` | `null` |
+| overlapping extracts | second waits for first + min interval | none | both succeed if each call does |
+
+#### 5. Good / Base / Bad
+
+- **Good**: two overlapping extracts → `maxInFlight === 1`; second
+  `generateText` starts only after first ends + `AI_EXTRACT_MIN_INTERVAL_MS`.
+- **Base**: first call 429, second succeeds → 2 `generateText` calls; warn
+  includes `attempt: 1` and `delay` in `[2000, 3000)` for attempt 1.
+- **Bad**: leave SDK `maxRetries` at default 2 → three immediate Zen hits
+  before our backoff (`Failed after 3 attempts. Last error: Rate limit
+  exceeded`). Do not serialize `fetchPage`.
+
+#### 6. Tests Required
+
+`tests/unit/ai-extract.test.ts` (mock `./ai-sdk`, set env before import,
+`resetEnvCache()`):
+
+- overlapping extracts: `maxInFlight === 1`, start gap ≥ call duration +
+  min interval, `generateText` called with `maxRetries: 0`.
+- first-call 429 then success: 2 calls; warn has `attempt` + `delay`.
+
+Do not lower `fetch-page.ts` / scheduler concurrency in these tests.
+
+#### 7. Wrong vs Correct
+
+```ts
+// Wrong — SDK retries burst the quota before our limiter/backoff
+await generateText({ model, prompt });
+
+// Wrong — vi.mock("ai") is a no-op (package is Vite-externalized)
+vi.mock("ai", () => ({ generateText: vi.fn() }));
+
+// Correct — own retries; mock the local re-export
+await generateTextThrottled({ model, prompt }, { productId, url });
+// generateTextThrottled → generateText({ ...options, maxRetries: 0 })
+vi.mock("../../packages/prices/src/pipeline/ai-sdk", () => ({ generateText, ... }));
+```
+
 ```typescript
 async function extractPrice(url: string, config: ResolvedAiConfig, productId?: string) {
   const model = createModel(config);
@@ -335,7 +439,7 @@ async function extractPrice(url: string, config: ResolvedAiConfig, productId?: s
 
 | Error | Cause | Resolution |
 |-------|-------|------------|
-| Rate limit exceeded | Too many requests | Implement exponential backoff |
+| Rate limit exceeded | Too many requests | Shared limiter (default 1) + min interval (default 2 s) + 429 backoff (max 3) in `aiExtractPrice` |
 | Context length exceeded | Prompt too long | Use the fetch-tool path (compact reduction) |
 | Invalid API key | Missing/wrong credentials | Set `AI_API_KEY` (env) or via admin UI |
 | Schema validation failed | AI output doesn't match schema | Tighten `buildToolExtractionPrompt` |
@@ -382,6 +486,7 @@ Parse + validate the response yourself (`parseExtractionJson` in `ai-extract.ts`
 |------|-------------|
 | Always enable telemetry | Track token usage and performance for cost monitoring |
 | Use the fetch-tool path | `generateText` + `fetchPage` tool; avoids truncation (1c) and works with thinking models (1b) |
+| Throttle `generateText` | Shared limiter + min interval + 429 backoff + `maxRetries: 0`; do not serialize `fetchPage` |
 | Validate model JSON yourself | `generateText` does not validate; use `priceExtractionSchema.safeParse` |
 | Use the zod-v4 `toJSONSchema` trick | For tool `parameters` and any `jsonSchema()` (1a) |
 | Handle errors gracefully | Return `null` on failure, never crash the pipeline |
@@ -396,6 +501,9 @@ Parse + validate the response yourself (`parseExtractionJson` in `ai-extract.ts`
 AI_BASE_URL=https://api.openai.com/v1
 AI_API_KEY=
 AI_MODEL=gpt-4o-mini
+# Optional: throttle generateText (defaults: 1 in-flight, 2 s gap).
+# AI_EXTRACT_CONCURRENCY=1
+# AI_EXTRACT_MIN_INTERVAL_MS=2000
 ```
 
 There are no per-provider env vars (`OPENAI_API_KEY`, `GOOGLE_*`,

@@ -107,6 +107,7 @@
 | Telemetry configuration     | [ai-sdk-integration.md](./ai-sdk-integration.md) |
 | Prompt engineering          | [ai-sdk-integration.md](./ai-sdk-integration.md) |
 | AI error handling           | [ai-sdk-integration.md](./ai-sdk-integration.md) |
+| Extraction throttle (429)   | [ai-sdk-integration.md](./ai-sdk-integration.md) |
 
 ---
 
