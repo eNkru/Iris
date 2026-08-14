@@ -15,6 +15,11 @@ async function main(): Promise<void> {
     aiApiKey: process.env.AI_API_KEY ?? "",
     aiModel: process.env.AI_MODEL ?? "gpt-4o-mini",
     pollIntervalDefaultMinutes: 60,
+    aiZenHost: process.env.AI_ZEN_HOST ?? "opencode.ai",
+    aiUserAgent:
+      process.env.AI_USER_AGENT ??
+      "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+    aiClientHeader: process.env.AI_CLIENT_HEADER ?? "cli",
   });
 
   logger.info("Seeded global_settings singleton row", {

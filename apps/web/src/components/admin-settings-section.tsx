@@ -21,6 +21,9 @@ export function AdminSettingsSection() {
   const [aiModel, setAiModel] = useState("");
   const [pollInterval, setPollInterval] = useState("");
   const [botToken, setBotToken] = useState("");
+  const [aiZenHost, setAiZenHost] = useState("opencode.ai");
+  const [aiUserAgent, setAiUserAgent] = useState("");
+  const [aiClientHeader, setAiClientHeader] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -41,6 +44,9 @@ export function AdminSettingsSection() {
       setPollInterval(data.settings.pollIntervalDefaultMinutes.toString());
       setAiApiKey("");
       setBotToken("");
+      setAiZenHost(data.settings.aiZenHost);
+      setAiUserAgent(data.settings.aiUserAgent);
+      setAiClientHeader(data.settings.aiClientHeader);
       setHasLoaded(true);
     }
   }, [data, hasLoaded]);
@@ -70,6 +76,9 @@ export function AdminSettingsSection() {
         pollIntervalDefaultMinutes: parsedInterval,
         aiApiKey: aiApiKey.trim() === "" ? undefined : aiApiKey.trim(),
         telegramBotToken: botToken.trim() === "" ? undefined : botToken.trim(),
+        aiZenHost: aiZenHost.trim(),
+        aiUserAgent: aiUserAgent.trim(),
+        aiClientHeader: aiClientHeader.trim(),
       });
       setAiApiKey("");
       setBotToken("");
@@ -194,6 +203,60 @@ export function AdminSettingsSection() {
                     token: data.settings.telegramBotToken,
                   })
                 : t("adminSettings.botTokenNone")}
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="ai-zen-host">{t("adminSettings.aiZenHostLabel")}</Label>
+            <Input
+              id="ai-zen-host"
+              type="text"
+              placeholder={t("adminSettings.aiZenHostPlaceholder")}
+              value={aiZenHost}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiZenHost(e.target.value);
+              }}
+              disabled={updateGlobalSettings.isPending}
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.aiZenHostHint")}
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="ai-user-agent">{t("adminSettings.aiUserAgentLabel")}</Label>
+            <Input
+              id="ai-user-agent"
+              type="text"
+              placeholder={t("adminSettings.aiUserAgentPlaceholder")}
+              value={aiUserAgent}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiUserAgent(e.target.value);
+              }}
+              disabled={updateGlobalSettings.isPending}
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.aiUserAgentHint")}
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="ai-client-header">{t("adminSettings.aiClientHeaderLabel")}</Label>
+            <Input
+              id="ai-client-header"
+              type="text"
+              placeholder={t("adminSettings.aiClientHeaderPlaceholder")}
+              value={aiClientHeader}
+              onChange={(e) => {
+                setSavedAt(null);
+                setAiClientHeader(e.target.value);
+              }}
+              disabled={updateGlobalSettings.isPending}
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("adminSettings.aiClientHeaderHint")}
             </p>
           </div>
 

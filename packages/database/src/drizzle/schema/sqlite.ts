@@ -104,6 +104,9 @@ export const globalSettings = sqliteTable("global_settings", {
   aiModel: text("aiModel").notNull().default("gpt-4o-mini"),
   pollIntervalDefaultMinutes: integer("pollIntervalDefaultMinutes").notNull().default(60),
   telegramBotToken: text("telegramBotToken"),
+  aiZenHost: text("aiZenHost").notNull().default("opencode.ai"),
+  aiUserAgent: text("aiUserAgent").notNull().default("opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13"),
+  aiClientHeader: text("aiClientHeader").notNull().default("cli"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
