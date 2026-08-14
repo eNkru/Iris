@@ -33,6 +33,12 @@ export const updateGlobalSettingsProcedure = adminProcedure
       aiModel: input.aiModel ?? row?.aiModel ?? "gpt-4o-mini",
       pollIntervalDefaultMinutes:
         input.pollIntervalDefaultMinutes ?? row?.pollIntervalDefaultMinutes ?? 60,
+      aiZenHost: input.aiZenHost ?? row?.aiZenHost ?? "opencode.ai",
+      aiUserAgent:
+        input.aiUserAgent ??
+        row?.aiUserAgent ??
+        "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+      aiClientHeader: input.aiClientHeader ?? row?.aiClientHeader ?? "cli",
     };
 
     // Write-only secrets: save only when a non-empty value is submitted.
@@ -55,6 +61,12 @@ export const updateGlobalSettingsProcedure = adminProcedure
         pollIntervalDefaultMinutes:
           updated?.pollIntervalDefaultMinutes ?? merged.pollIntervalDefaultMinutes ?? 60,
         telegramBotToken: maskSecret(updated?.telegramBotToken ?? null),
+        aiZenHost: updated?.aiZenHost ?? merged.aiZenHost ?? "opencode.ai",
+        aiUserAgent:
+          updated?.aiUserAgent ??
+          merged.aiUserAgent ??
+          "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+        aiClientHeader: updated?.aiClientHeader ?? merged.aiClientHeader ?? "cli",
       },
     };
   });

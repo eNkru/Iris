@@ -31,6 +31,11 @@ export const getGlobalSettingsProcedure = adminProcedure
         aiModel: row?.aiModel ?? "gpt-4o-mini",
         pollIntervalDefaultMinutes: row?.pollIntervalDefaultMinutes ?? 60,
         telegramBotToken: maskSecret(row?.telegramBotToken ?? null),
+        aiZenHost: row?.aiZenHost ?? "opencode.ai",
+        aiUserAgent:
+          row?.aiUserAgent ??
+          "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+        aiClientHeader: row?.aiClientHeader ?? "cli",
       },
     };
   });

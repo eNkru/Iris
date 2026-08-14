@@ -33,6 +33,17 @@ export const envSchema = z.object({
   AI_EXTRACT_CONCURRENCY: z.coerce.number().int().positive().default(1),
   AI_EXTRACT_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(2_000),
 
+  // AI client identification headers — sent only when the base URL hostname
+  // matches AI_ZEN_HOST. Lets the admin update the User-Agent / client header
+  // when OpenCode Zen bumps versions or changes its identification scheme,
+  // without a code change. Stored in `global_settings` (admin-editable); these
+  // env vars are the boot-time fallback (DB → env).
+  AI_ZEN_HOST: z.string().default("opencode.ai"),
+  AI_USER_AGENT: z.string().default(
+    "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+  ),
+  AI_CLIENT_HEADER: z.string().default("cli"),
+
   // Telegram alert channel
   TELEGRAM_BOT_TOKEN: z.string().default(""),
 

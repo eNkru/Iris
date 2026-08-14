@@ -38,6 +38,9 @@ export interface ResolvedAiConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  aiZenHost: string;
+  aiUserAgent: string;
+  aiClientHeader: string;
 }
 
 /**
@@ -47,19 +50,27 @@ export interface ResolvedAiConfig {
  * the "missing key → logged no-op" design.
  */
 export function resolveAiConfig(
-  globalSettings: Pick<GlobalSettingsRow, "aiBaseUrl" | "aiApiKey" | "aiModel"> | null,
+  globalSettings:
+    | Pick<
+        GlobalSettingsRow,
+        "aiBaseUrl" | "aiApiKey" | "aiModel" | "aiZenHost" | "aiUserAgent" | "aiClientHeader"
+      >
+    | null,
   override: AiModelOverride | null = null,
 ): ResolvedAiConfig | null {
   const env = getEnv();
   const baseUrl = globalSettings?.aiBaseUrl || env.AI_BASE_URL;
   const apiKey = globalSettings?.aiApiKey || env.AI_API_KEY;
   const model = override?.model ?? globalSettings?.aiModel ?? env.AI_MODEL;
+  const aiZenHost = globalSettings?.aiZenHost || env.AI_ZEN_HOST;
+  const aiUserAgent = globalSettings?.aiUserAgent || env.AI_USER_AGENT;
+  const aiClientHeader = globalSettings?.aiClientHeader || env.AI_CLIENT_HEADER;
 
   if (!baseUrl || !model) {
     return null;
   }
 
-  return { baseUrl, apiKey, model };
+  return { baseUrl, apiKey, model, aiZenHost, aiUserAgent, aiClientHeader };
 }
 
 /**
@@ -71,10 +82,22 @@ function createModel(config: ResolvedAiConfig): LanguageModel | null {
   if (config.apiKey === "") {
     return null;
   }
+  const isZenEndpoint =
+    config.aiZenHost !== "" && new URL(config.baseUrl).hostname === config.aiZenHost;
+  const headers: Record<string, string> = {};
+  if (isZenEndpoint) {
+    if (config.aiUserAgent !== "") {
+      headers["User-Agent"] = config.aiUserAgent;
+    }
+    if (config.aiClientHeader !== "") {
+      headers["X-Opencode-Client"] = config.aiClientHeader;
+    }
+  }
   return createOpenAICompatible({
     name: "iris",
     baseURL: config.baseUrl,
     apiKey: config.apiKey,
+    ...(Object.keys(headers).length > 0 ? { headers } : {}),
   })(config.model);
 }
 

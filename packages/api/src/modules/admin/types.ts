@@ -17,6 +17,9 @@ export const globalSettingsShapeSchema = z.object({
   aiModel: z.string(),
   pollIntervalDefaultMinutes: z.number().int(),
   telegramBotToken: z.string().nullable(),
+  aiZenHost: z.string(),
+  aiUserAgent: z.string(),
+  aiClientHeader: z.string(),
 });
 export type GlobalSettingsOutput = z.infer<typeof globalSettingsShapeSchema>;
 
@@ -41,6 +44,9 @@ export const updateGlobalSettingsInputSchema = z.object({
    * token is left unchanged (never returned by GET).
    */
   telegramBotToken: z.string().optional(),
+  aiZenHost: z.string().optional(),
+  aiUserAgent: z.string().optional(),
+  aiClientHeader: z.string().optional(),
 });
 export type UpdateGlobalSettingsInput = z.infer<typeof updateGlobalSettingsInputSchema>;
 

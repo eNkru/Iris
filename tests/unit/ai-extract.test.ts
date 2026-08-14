@@ -27,6 +27,9 @@ const CONFIG: ResolvedAiConfig = {
   baseUrl: "https://opencode.ai/zen/v1",
   apiKey: "test-key",
   model: "deepseek-v4-flash-free",
+  aiZenHost: "opencode.ai",
+  aiUserAgent: "opencode/1.18.12 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13",
+  aiClientHeader: "cli",
 };
 
 const PAGE_HTML = "<html><body><h1>Widget</h1><span>$119.00</span></body></html>";

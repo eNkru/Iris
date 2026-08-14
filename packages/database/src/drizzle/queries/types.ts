@@ -9,6 +9,9 @@ export type GlobalSettingsRow = {
   aiModel: string;
   pollIntervalDefaultMinutes: number;
   telegramBotToken: string | null;
+  aiZenHost: string;
+  aiUserAgent: string;
+  aiClientHeader: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -19,4 +22,7 @@ export type GlobalSettingsInput = {
   aiModel?: string;
   pollIntervalDefaultMinutes?: number;
   telegramBotToken?: string;
+  aiZenHost?: string;
+  aiUserAgent?: string;
+  aiClientHeader?: string;
 };
