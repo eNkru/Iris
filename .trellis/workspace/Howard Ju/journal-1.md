@@ -447,3 +447,36 @@ Added a process-wide pLimit(1) + 2s min-interval + 429 exponential-backoff throt
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Image loading pipeline improvements
+
+**Date**: 2026-08-16
+**Task**: Image loading pipeline improvements
+**Branch**: `feat/image-loading-improvements`
+
+### Summary
+
+Hardened the server-side product image pipeline: added a shared retryWithBackoff helper used by both fetch-page and extract-image; added magic-byte validation (JPEG/PNG/GIF/WebP/AVIF) so unknown or mismatched content types return null instead of silently writing .jpg; bounded image-download concurrency with a module-level pLimit(3); dropped SVG from both downloader and serve endpoint to close the same-origin XSS vector. 18 new unit tests; lint/typecheck/build clean. Branched, committed, and pushed as feat/image-loading-improvements.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d6f8877` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
