@@ -45,6 +45,7 @@ export function ProductList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [summaryCount, setSummaryCount] = useState<number | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const products = data?.products ?? [];
 
@@ -189,19 +190,18 @@ export function ProductList() {
               <div className="flex flex-wrap items-center gap-2">
               <div className="group relative">
                 {product.imagePath ? (
-                  <>
+                  <button
+                    type="button"
+                    onClick={() => setLightboxImage(product.id)}
+                    className="shrink-0 cursor-zoom-in rounded-lg border border-slate-200 dark:border-slate-700"
+                  >
                     <img
                       src={`/api/images/${product.id}`}
                       alt={product.name ?? product.url}
-                      className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                      className="h-12 w-12 rounded-lg object-cover"
                       loading="lazy"
                     />
-                    <img
-                      src={`/api/images/${product.id}`}
-                      alt={product.name ?? product.url}
-                      className="pointer-events-none absolute left-1/2 top-full z-50 hidden h-auto w-[640px] max-w-[90vw] -translate-x-1/2 translate-y-2 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:block group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </>
+                  </button>
                 ) : null}
               </div>
                 <Link
@@ -301,6 +301,28 @@ export function ProductList() {
         );
       })}
       {listToolbar}
+
+      {lightboxImage ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxImage(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl text-white transition-colors hover:bg-white/20"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          <img
+            src={`/api/images/${lightboxImage}`}
+            alt="Product image"
+            className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
