@@ -1,6 +1,7 @@
 import pLimit from "p-limit";
 import { getEnv, logger } from "@iris/utils";
 import { detectBlockedPage, isBlockedSignatureRetryable } from "./blocked-signatures";
+import { backoffDelayMs } from "./retry";
 
 /**
  * Page fetching via a single anti-detect-browser transport (Camoufox) hosted
@@ -30,9 +31,6 @@ import { detectBlockedPage, isBlockedSignatureRetryable } from "./blocked-signat
 const FETCH_CONCURRENCY = 5;
 const FETCH_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 1_000;
-const RETRY_MAX_DELAY_MS = 30_000;
-const RETRY_JITTER_FACTOR = 0.5;
 
 /**
  * Discriminated result of a page fetch (design.md §fetchPage return type).
@@ -51,18 +49,6 @@ export type FetchPageResult =
 export interface FetchPageOptions {
   /** Optional caller context for structured logging. */
   productId?: string;
-}
-
-function calculateBackoffDelay(attempt: number): number {
-  const exponential = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
-  const capped = Math.min(exponential, RETRY_MAX_DELAY_MS);
-  return capped + capped * RETRY_JITTER_FACTOR * Math.random();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 /** Module-wide limiter: all page fetches share this concurrency budget. */
@@ -136,8 +122,6 @@ async function attemptSidecarFetch(url: string): Promise<FetchAttempt> {
       return { kind: "error", message: `sidecar non-JSON response: ${message}` };
     }
 
-    // Validate the payload shape defensively — a misbehaving sidecar must not
-    // crash the pipeline.
     if (
       payload &&
       typeof payload === "object" &&
@@ -157,23 +141,13 @@ async function attemptSidecarFetch(url: string): Promise<FetchAttempt> {
       const fail = payload as SidecarFailResponse;
       const reason = typeof fail.reason === "string" ? fail.reason : "unknown";
       if (reason === "blocked") {
-        // The sidecar itself flagged an anti-bot block (it never throws).
-        // The signature registry is the source of truth for the canonical id,
-        // but the sidecar reports blocked without HTML, so we surface the
-        // sidecar's reason as the signature and let the caller map it to the
-        // specific anti-bot message.
         return { kind: "blocked", reason };
       }
-      // `fetch_failed` (or any other reason) is a transport-level failure —
-      // map to `error` so the retry loop owns backoff, and callers surface
-      // "Page fetch failed" rather than a misleading anti-bot message.
       return { kind: "error", message: `sidecar fetch failed (${reason})` };
     }
 
     return { kind: "error", message: "sidecar returned an unexpected payload" };
   } catch (error) {
-    // Never throw: map network / timeout / abort errors so the retry loop
-    // owns backoff and structured logging (attempt number included there).
     const message = error instanceof Error ? error.message : String(error);
     return { kind: "error", message };
   }
@@ -194,6 +168,12 @@ async function attemptSidecarFetch(url: string): Promise<FetchAttempt> {
  * fresh attempts, so retrying lifts the effective success rate well above the
  * single-attempt pass rate. Final deny signatures (`retryable: false`) return
  * immediately.
+ *
+ * This loop is custom (not the shared `retryWithBackoff` helper) because the
+ * per-attempt outcome is a 3-way discriminated union rather than a thrown /
+ * not-thrown pair: a `blocked` result that is `retryable: true` must trigger a
+ * retry the same way a transport `error` does, while a non-retryable block
+ * returns immediately.
  */
 export async function fetchPage(
   url: string,
@@ -204,10 +184,6 @@ export async function fetchPage(
       const result = await attemptSidecarFetch(url);
 
       if (result.kind === "ok") {
-        // Run the generic anti-bot signature check on the returned HTML so a
-        // challenge page the sidecar delivered verbatim is still caught
-        // (design.md §orchestration). A non-null signature short-circuits to
-        // the specific blocked reason; otherwise this is a real page.
         const signature = detectBlockedPage(result.html);
         if (signature) {
           if (isBlockedSignatureRetryable(signature) && attempt < MAX_RETRIES) {
@@ -217,7 +193,7 @@ export async function fetchPage(
               attempt,
               productId: options.productId,
             });
-            await sleep(calculateBackoffDelay(attempt));
+            await sleep(backoffDelayMs(attempt));
             continue;
           }
           return { kind: "blocked", signature };
@@ -226,9 +202,6 @@ export async function fetchPage(
       }
 
       if (result.kind === "blocked") {
-        // The sidecar itself flagged an anti-bot block (it never throws). The
-        // sidecar reports blocked without HTML, so use its reason as the
-        // signature — callers map it to the specific anti-bot message (AC3).
         const retryable = isBlockedSignatureRetryable(result.reason);
         logger.warn("Page blocked by anti-bot challenge (sidecar)", {
           url,
@@ -238,13 +211,12 @@ export async function fetchPage(
           productId: options.productId,
         });
         if (retryable && attempt < MAX_RETRIES) {
-          await sleep(calculateBackoffDelay(attempt));
+          await sleep(backoffDelayMs(attempt));
           continue;
         }
         return { kind: "blocked", signature: result.reason };
       }
 
-      // result.kind === "error" — already logged inside attemptSidecarFetch.
       logger.warn("Page fetch sidecar error", {
         url,
         error: result.message,
@@ -253,8 +225,7 @@ export async function fetchPage(
       });
 
       if (attempt < MAX_RETRIES) {
-        const delay = calculateBackoffDelay(attempt);
-        await sleep(delay);
+        await sleep(backoffDelayMs(attempt));
         continue;
       }
 
@@ -267,5 +238,11 @@ export async function fetchPage(
     }
 
     return null;
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
 }

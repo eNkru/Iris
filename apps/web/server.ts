@@ -93,9 +93,11 @@ app.get("/api/images/:id", async (c) => {
     png: "image/png",
     gif: "image/gif",
     webp: "image/webp",
-    svg: "image/svg+xml",
   };
-  const contentType = contentTypes[ext] ?? "application/octet-stream";
+  const contentType = contentTypes[ext];
+  if (!contentType) {
+    return c.body("Not found", 404);
+  }
 
   const buffer = await readFile(filePath);
   return new Response(buffer, {
