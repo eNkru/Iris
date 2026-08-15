@@ -187,14 +187,23 @@ export function ProductList() {
           >
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
+              <div className="group relative">
                 {product.imagePath ? (
-                  <img
-                    src={`/api/images/${product.id}`}
-                    alt={product.name ?? product.url}
-                    className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
-                    loading="lazy"
-                  />
+                  <>
+                    <img
+                      src={`/api/images/${product.id}`}
+                      alt={product.name ?? product.url}
+                      className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                      loading="lazy"
+                    />
+                    <img
+                      src={`/api/images/${product.id}`}
+                      alt={product.name ?? product.url}
+                      className="pointer-events-none absolute left-1/2 top-full z-50 hidden w-80 -translate-x-1/2 translate-y-2 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:block group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </>
                 ) : null}
+              </div>
                 <Link
                   to={`/products/${product.id}`}
                   className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${
