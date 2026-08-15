@@ -127,7 +127,11 @@ export async function downloadProductImage(
   try {
     const response = await fetch(imageUrl, {
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      headers: { "user-agent": "Mozilla/5.0 (compatible; Iris/1.0)" },
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+        accept: "image/*,*/*;q=0.8",
+      },
     });
 
     if (!response.ok) {

@@ -109,7 +109,22 @@ async function runCheckPrice(productId: string): Promise<CheckPriceResult> {
   if (!product.imagePath) {
     const imageUrl = extractProductImageUrl(page.html, page.url);
     if (imageUrl) {
+      logger.info("Attempting product image download", {
+        productId,
+        imageUrl,
+      });
       imageFilename = await downloadProductImage(productId, imageUrl);
+      if (!imageFilename) {
+        logger.warn("Product image download returned null", {
+          productId,
+          imageUrl,
+        });
+      }
+    } else {
+      logger.warn("No product image URL found in page HTML", {
+        productId,
+        url: product.url,
+      });
     }
   }
 
