@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared code conventions (logging, errors, type-safety) that apply to all packages including prices pipeline."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Defines how the web app calls backend procedures; relevant for the serve-route change in apps/web/server.ts."}
+{"file": ".trellis/spec/backend/performance.md", "reason": "Defines p-limit and concurrency-budget patterns; the new imageDownloadLimiter must follow the same module-level singleton pattern as the existing pageFetchLimiter."}
+{"file": ".trellis/spec/backend/logging.md", "reason": "Structured-logging conventions for the new warn-level failures (content-type mismatch, retry-exhausted, size-cap)."}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Pre-commit checklist (lint + typecheck + tests) before wrap-up."}

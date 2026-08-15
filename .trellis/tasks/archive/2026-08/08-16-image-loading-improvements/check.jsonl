@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/shared/index.md", "reason": "Cross-layer quality conventions (structured logging, no console.log, Zod schemas) the check sub-agent verifies."}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Pre-commit checklist — the checklist to walk through before reporting the task complete."}
+{"file": ".trellis/spec/backend/performance.md", "reason": "Concurrency / p-limit pattern conformance for the new imageDownloadLimiter."}
+{"file": ".trellis/spec/backend/logging.md", "reason": "Verify the new warn-level logs include structured context (productId, imageUrl, reason) without string interpolation."}
