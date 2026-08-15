@@ -10,7 +10,7 @@ const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
   "image/svg+xml": ".svg",
 };
 
-const DOWNLOAD_TIMEOUT_MS = 15_000;
+const DOWNLOAD_TIMEOUT_MS = 45_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /**
@@ -117,6 +117,12 @@ function getImagesDir(): string {
  * is `{productId}.{ext}`, where the extension is derived from the response
  * `Content-Type` header.
  *
+ * Routes the download through the Camoufox sidecar (`POST /v1/fetch-image`)
+ * — the same anti-detect browser that fetches page HTML. Retailers behind
+ * Cloudflare or other anti-bot WAFs (e.g. pbtech.co.nz) 403 a plain Node.js
+ * `fetch` on image CDN URLs; the browser request carries the full TLS
+ * fingerprint and passes the WAF.
+ *
  * Returns the filename on success, or `null` on any failure. Never throws —
  * image capture is best-effort and must not fail the pipeline.
  */
@@ -125,17 +131,18 @@ export async function downloadProductImage(
   imageUrl: string,
 ): Promise<string | null> {
   try {
-    const response = await fetch(imageUrl, {
+    const { CAMOUFOX_SIDECAR_URL } = getEnv();
+    const endpoint = `${CAMOUFOX_SIDECAR_URL.replace(/\/+$/, "")}/v1/fetch-image`;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: imageUrl }),
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-        accept: "image/*,*/*;q=0.8",
-      },
     });
 
     if (!response.ok) {
-      logger.warn("Product image download failed (non-2xx)", {
+      logger.warn("Product image download failed (sidecar non-2xx)", {
         productId,
         imageUrl,
         status: response.status,
@@ -143,25 +150,40 @@ export async function downloadProductImage(
       return null;
     }
 
-    const contentLength = response.headers.get("content-length");
-    if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) {
-      logger.warn("Product image too large, skipping", {
+    const payload = (await response.json()) as {
+      ok: boolean;
+      contentType?: string;
+      data?: string;
+      reason?: string;
+    };
+
+    if (!payload.ok || !payload.data) {
+      logger.warn("Product image download failed (sidecar)", {
         productId,
         imageUrl,
-        contentLength,
+        reason: payload.reason ?? "unknown",
       });
       return null;
     }
 
-    const contentType = response.headers.get("content-type") ?? "image/jpeg";
+    const contentType = payload.contentType ?? "image/jpeg";
     const ext = getExtensionFromContentType(contentType);
     const filename = `${productId}${ext}`;
 
-    const buffer = await response.arrayBuffer();
+    const buffer = Buffer.from(payload.data, "base64");
+
+    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+      logger.warn("Product image too large, skipping", {
+        productId,
+        imageUrl,
+        bytes: buffer.byteLength,
+      });
+      return null;
+    }
 
     const imagesDir = getImagesDir();
     mkdirSync(imagesDir, { recursive: true });
-    writeFileSync(path.join(imagesDir, filename), Buffer.from(buffer));
+    writeFileSync(path.join(imagesDir, filename), buffer);
 
     logger.info("Product image downloaded", {
       productId,

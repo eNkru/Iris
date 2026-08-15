@@ -469,6 +469,28 @@ class FetchResponseFail(BaseModel):
     reason: str  # "blocked" | "fetch_failed"
 
 
+class FetchImageRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def _url_must_be_absolute(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("url must be an absolute http(s) URL")
+        return value
+
+
+class FetchImageResponseOk(BaseModel):
+    ok: bool = True
+    contentType: str
+    data: str  # base64-encoded binary image data
+
+
+class FetchImageResponseFail(BaseModel):
+    ok: bool = False
+    reason: str  # "fetch_failed" | "non_image"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Start the sidecar: semaphore, launch lock, and idle watcher.
@@ -627,3 +649,96 @@ async def _do_fetch(
         except Exception as exc:  # noqa: BLE001 — never throw to the caller
             _record_failure(request.url, exc, kind="error")
             return FetchResponseFail(reason="fetch_failed")
+
+
+@app.post("/v1/fetch-image")
+async def fetch_image(
+    request: FetchImageRequest,
+) -> FetchImageResponseOk | FetchImageResponseFail:
+    """Fetch a binary image through the Camoufox browser.
+
+    Product image URLs often sit behind the same Cloudflare / anti-bot WAF
+    as the product page. A plain Node.js ``fetch`` gets 403'd because it
+    lacks the browser's TLS fingerprint and challenge-solving capability.
+    Routing the image download through the sidecar — the same browser that
+    fetched the page HTML — ensures the image request carries the full
+    anti-detect fingerprint and passes the WAF.
+
+    Returns base64-encoded binary data (JSON cannot carry raw bytes).
+    """
+    assert _semaphore is not None and _launch_lock is not None, (
+        "sidecar not started — lifespan must run before requests"
+    )
+    global _active_fetches, _last_activity_at
+    _last_activity_at = time.monotonic()
+    _active_fetches += 1
+    try:
+        return await _do_fetch_image(request)
+    finally:
+        _active_fetches -= 1
+
+
+async def _do_fetch_image(
+    request: FetchImageRequest,
+) -> FetchImageResponseOk | FetchImageResponseFail:
+    """Inner image-fetch body; mirrors ``_do_fetch`` structure.
+
+    Navigates to the image URL, reads ``response.body()``, and returns it
+    base64-encoded. Images don't need the SPA render-wait or content-
+    snapshot retry — ``wait_until="load"`` fires when the image bytes are
+    fully received.
+    """
+    import base64
+
+    async with _semaphore:
+        try:
+            browser = await _ensure_browser()
+            page = await browser.new_page()
+            try:
+                response = await page.goto(
+                    request.url,
+                    wait_until="load",
+                    timeout=int(FETCH_TIMEOUT_SECONDS * 1000),
+                )
+                if response is None:
+                    _record_failure(request.url, None, kind="no_response")
+                    return FetchImageResponseFail(reason="fetch_failed")
+
+                content_type = response.headers.get(
+                    "content-type", "image/jpeg"
+                )
+
+                if not content_type.startswith("image/"):
+                    logger.warning(
+                        "sidecar fetch-image non-image content-type "
+                        "url=%s content_type=%s status=%d",
+                        request.url,
+                        content_type,
+                        response.status,
+                    )
+                    return FetchImageResponseFail(reason="non_image")
+
+                body = await response.body()
+                _record_success()
+                data = base64.b64encode(body).decode("ascii")
+                return FetchImageResponseOk(
+                    contentType=content_type,
+                    data=data,
+                )
+            finally:
+                try:
+                    await page.close()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "sidecar page close failed url=%s error_type=%s "
+                        "error=%s",
+                        request.url,
+                        _exc_type_name(exc),
+                        str(exc),
+                    )
+        except (PlaywrightTimeoutError, asyncio.TimeoutError) as exc:
+            _record_failure(request.url, exc, kind="timeout")
+            return FetchImageResponseFail(reason="fetch_failed")
+        except Exception as exc:  # noqa: BLE001 — never throw to the caller
+            _record_failure(request.url, exc, kind="error")
+            return FetchImageResponseFail(reason="fetch_failed")
