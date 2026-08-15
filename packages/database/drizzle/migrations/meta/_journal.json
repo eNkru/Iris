@@ -15,6 +15,13 @@
       "when": 1786707902521,
       "tag": "0001_outgoing_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786787347939,
+      "tag": "0002_light_gamora",
+      "breakpoints": true
     }
   ]
 }

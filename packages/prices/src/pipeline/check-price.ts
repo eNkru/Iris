@@ -7,6 +7,7 @@ import { dispatchPriceAlert } from "../notifications/dispatch";
 import { roundToCent, shouldAlert } from "./alert-rules";
 import { resolveAiConfig, aiExtractPrice } from "./ai-extract";
 import { fetchPage } from "./fetch-page";
+import { extractProductImageUrl, downloadProductImage } from "./extract-image";
 import type { CheckPriceResult } from "./types";
 
 type ProductRow = typeof products.$inferSelect;
@@ -101,6 +102,32 @@ async function runCheckPrice(productId: string): Promise<CheckPriceResult> {
     return { status: "unavailable" };
   }
 
+  // --- Image capture (best-effort, outside the DB transaction) ---
+  // Only capture when the product doesn't already have an image, so
+  // routine re-checks don't re-download the same image on every tick.
+  let imageFilename: string | null = null;
+  if (!product.imagePath) {
+    const imageUrl = extractProductImageUrl(page.html, page.url);
+    if (imageUrl) {
+      logger.info("Attempting product image download", {
+        productId,
+        imageUrl,
+      });
+      imageFilename = await downloadProductImage(productId, imageUrl);
+      if (!imageFilename) {
+        logger.warn("Product image download returned null", {
+          productId,
+          imageUrl,
+        });
+      }
+    } else {
+      logger.warn("No product image URL found in page HTML", {
+        productId,
+        url: product.url,
+      });
+    }
+  }
+
   // --- Transactional read-modify-write ---
   const outcome = db.transaction((tx) => {
     const locked = tx
@@ -120,7 +147,11 @@ async function runCheckPrice(productId: string): Promise<CheckPriceResult> {
     if (!changed) {
       tx
         .update(products)
-        .set({ lastCheckedAt: now, updatedAt: now })
+        .set({
+          lastCheckedAt: now,
+          updatedAt: now,
+          ...(imageFilename ? { imagePath: imageFilename } : {}),
+        })
         .where(eq(products.id, productId))
         .run();
 
@@ -144,6 +175,7 @@ async function runCheckPrice(productId: string): Promise<CheckPriceResult> {
         name: locked.name ?? extraction.name ?? null,
         lastCheckedAt: now,
         updatedAt: now,
+        ...(imageFilename ? { imagePath: imageFilename } : {}),
       })
       .where(eq(products.id, productId))
       .run();

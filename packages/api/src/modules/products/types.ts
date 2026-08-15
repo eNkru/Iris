@@ -85,6 +85,7 @@ export const productOutputSchema = z.object({
   name: z.string().nullable(),
   currency: z.string().nullable(),
   currentPrice: z.number().nullable(),
+  imagePath: z.string().nullable(),
   lastCheckedAt: z.date().nullable(),
   pollIntervalMinutes: z.number().int().nullable(),
   alertRules: alertRulesSchema,
