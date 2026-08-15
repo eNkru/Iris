@@ -199,7 +199,7 @@ export function ProductList() {
                     <img
                       src={`/api/images/${product.id}`}
                       alt={product.name ?? product.url}
-                      className="pointer-events-none absolute left-1/2 top-full z-50 hidden w-[640px] -translate-x-1/2 translate-y-2 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:block group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900"
+                      className="pointer-events-none absolute left-1/2 top-full z-50 hidden h-auto w-[640px] max-w-[90vw] -translate-x-1/2 translate-y-2 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:block group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900"
                     />
                   </>
                 ) : null}
