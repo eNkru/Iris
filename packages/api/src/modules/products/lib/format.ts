@@ -18,6 +18,7 @@ export function toProductOutput(row: ProductRow): ProductOutput {
     name: row.name,
     currency: row.currency,
     currentPrice: toNullableNumber(row.currentPrice),
+    imagePath: row.imagePath,
     lastCheckedAt: row.lastCheckedAt,
     pollIntervalMinutes: row.pollIntervalMinutes,
     alertRules: row.alertRules,

@@ -187,6 +187,14 @@ export function ProductList() {
           >
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
+                {product.imagePath ? (
+                  <img
+                    src={`/api/images/${product.id}`}
+                    alt={product.name ?? product.url}
+                    className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                    loading="lazy"
+                  />
+                ) : null}
                 <Link
                   to={`/products/${product.id}`}
                   className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${

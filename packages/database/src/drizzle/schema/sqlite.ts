@@ -33,6 +33,7 @@ export const products = sqliteTable(
     name: text("name"),
     currency: text("currency"),
     currentPrice: text("currentPrice"),
+    imagePath: text("imagePath"),
     lastCheckedAt: integer("lastCheckedAt", { mode: "timestamp" }),
     pollIntervalMinutes: integer("pollIntervalMinutes"),
     alertRules: text("alertRules", { mode: "json" }).$type<AlertRules>(),

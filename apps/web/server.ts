@@ -7,10 +7,13 @@ import { getSessionCookie } from "better-auth/cookies";
 import { Hono } from "hono";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { auth } from "@iris/auth";
+import { getProductImageForUser } from "@iris/database";
 import { router } from "@iris/api/orpc/router";
 import { startScheduler, stopScheduler } from "@iris/prices";
-import { logger } from "@iris/utils";
+import { getEnv, logger } from "@iris/utils";
 
 /**
  * Resolve the server directory. In CJS (esbuild production bundle),
@@ -54,6 +57,54 @@ app.on(["GET", "POST"], "/api/rpc/*", async (c) => {
  * `toNextJsHandler(auth)` in `app/api/auth/[...all]/route.ts`.
  */
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+/**
+ * Product image serving. Verifies the session, checks that the product
+ * belongs to the authenticated user, then streams the image file from
+ * the local `IMAGES_DIR`. Returns 404 when the product has no image or
+ * the file is missing on disk.
+ */
+app.get("/api/images/:id", async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.body("Unauthorized", 401);
+  }
+
+  const productId = c.req.param("id");
+
+  const product = await getProductImageForUser(productId, session.user.id);
+
+  if (!product?.imagePath) {
+    return c.body("Not found", 404);
+  }
+
+  const filePath = join(getEnv().IMAGES_DIR, product.imagePath);
+
+  try {
+    await stat(filePath);
+  } catch {
+    return c.body("Not found", 404);
+  }
+
+  const ext = product.imagePath.split(".").pop()?.toLowerCase() ?? "";
+  const contentTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+  };
+  const contentType = contentTypes[ext] ?? "application/octet-stream";
+
+  const buffer = await readFile(filePath);
+  return new Response(buffer, {
+    headers: {
+      "content-type": contentType,
+      "cache-control": "private, max-age=86400",
+    },
+  });
+});
 
 /**
  * Vite-built static assets (JS/CSS chunks). Served without auth — they are

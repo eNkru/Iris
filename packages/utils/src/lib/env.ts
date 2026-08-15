@@ -47,6 +47,10 @@ export const envSchema = z.object({
   // Telegram alert channel
   TELEGRAM_BOT_TOKEN: z.string().default(""),
 
+  // Local directory for downloaded product images.
+  // Derived from the database directory by default.
+  IMAGES_DIR: z.string().min(1).default("./data/images"),
+
   // Scheduler — in-process loop tick
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(30_000),
 

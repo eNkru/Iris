@@ -70,16 +70,25 @@ export function ProductDetailPage() {
             {t("detail.back")}
           </Link>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <h1
-                className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50"
-                title={product.url}
-              >
-                {product.name ?? product.url}
-              </h1>
-              <p className="truncate text-sm text-slate-400 dark:text-slate-500">
-                {product.url}
-              </p>
+            <div className="flex min-w-0 gap-4">
+              {product.imagePath ? (
+                <img
+                  src={`/api/images/${product.id}`}
+                  alt={product.name ?? product.url}
+                  className="h-48 w-48 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                />
+              ) : null}
+              <div className="min-w-0 space-y-1">
+                <h1
+                  className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  title={product.url}
+                >
+                  {product.name ?? product.url}
+                </h1>
+                <p className="truncate text-sm text-slate-400 dark:text-slate-500">
+                  {product.url}
+                </p>
+              </div>
             </div>
             <Badge tone={product.active ? "success" : "neutral"}>
               {product.active ? t("detail.active") : t("detail.paused")}
