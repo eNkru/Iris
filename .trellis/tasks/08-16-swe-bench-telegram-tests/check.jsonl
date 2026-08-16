@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/notifications-telegram.md", "reason": "Verify tests match the documented error matrix and contracts"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Check no any, no console.log, no non-null assertions in test files"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Verify shared code quality rules are followed"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Verify frontend component tests follow semantic HTML and accessibility patterns"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify test mocks properly cover layer boundaries"}
