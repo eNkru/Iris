@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/notifications-telegram.md", "reason": "Executable contracts for @iris/prices notifications: error matrix, HTML escaping, language batching, per-channel config"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Pre-commit checklist for backend code; no any, no non-null assertions, structured logging"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Mandatory code quality rules: no any, no console.log, no @ts-ignore, structured logging"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Semantic HTML, Server vs Client components, accessibility patterns"}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "Query and mutation hook patterns for React Query"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Frontend pre-commit checklist: no any, semantic HTML, proper ARIA"}
