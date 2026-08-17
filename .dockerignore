@@ -1,6 +1,14 @@
-# Dependencies
+# Dependencies — `**/` anchors are required so nested workspace node_modules
+# (packages/auth, apps/web, etc.) are excluded too. A bare `node_modules` only
+# excludes the repo root; the nested pnpm symlinks it leaves behind would get
+# COPY'd over the image's pnpm-installed symlinks. pnpm's virtual-store dir
+# names carry an environment-specific hash, so the host symlinks point at a
+# `.pnpm/<pkg>@<ver>__<hash>` path that does not exist in the container,
+# breaking bare-import resolution (e.g. `better-auth/react`) at vite build.
+**/node_modules
 node_modules
 .pnpm-store
+**/.pnpm-store
 
 # Local SQLite data
 data
