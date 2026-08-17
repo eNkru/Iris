@@ -159,10 +159,10 @@ export function ProductList() {
     return (
       <div className="space-y-4">
         <Card className="flex flex-col items-center gap-2 py-10 text-center">
-          <p className="text-base font-medium text-slate-800 dark:text-slate-200">
+          <p className="text-base font-medium text-stone-800 dark:text-stone-200">
             {t("productList.emptyTitle")}
           </p>
-          <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">
+          <p className="max-w-sm text-sm text-stone-500 dark:text-stone-400">
             {t("productList.empty")}
           </p>
         </Card>
@@ -186,64 +186,64 @@ export function ProductList() {
             key={product.id}
             className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           >
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-              <div className="group relative">
-                {product.imagePath ? (
-                  <button
-                    type="button"
-                    onClick={() => setLightboxImage(product.id)}
-                    className="shrink-0 cursor-zoom-in rounded-lg border border-slate-200 dark:border-slate-700"
-                  >
-                    <img
-                      src={`/api/images/${product.id}`}
-                      alt={product.name ?? product.url}
-                      className="h-12 w-12 rounded-lg object-cover"
-                      loading="lazy"
-                    />
-                  </button>
-                ) : null}
-              </div>
-                <Link
-                  to={`/products/${product.id}`}
-                  className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${
-                    product.active
-                      ? "text-slate-900 dark:text-slate-100"
-                      : "text-slate-400 dark:text-slate-500"
-                  }`}
+            <div className="flex min-w-0 gap-4">
+              {product.imagePath ? (
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(product.id)}
+                  className="shrink-0 cursor-zoom-in self-start rounded-lg border border-stone-200 dark:border-stone-700"
                 >
-                  {product.name ?? product.url}
-                </Link>
-                <Badge tone={product.active ? "success" : "neutral"}>
-                  {product.active
-                    ? t("productList.active")
-                    : t("productList.paused")}
-                </Badge>
+                  <img
+                    src={`/api/images/${product.id}`}
+                    alt={product.name ?? product.url}
+                    className="h-20 w-20 rounded-lg object-cover"
+                    loading="lazy"
+                  />
+                </button>
+              ) : null}
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/products/${product.id}`}
+                    className={`block truncate text-base font-semibold tracking-tight transition-colors hover:text-[var(--accent)] ${
+                      product.active
+                        ? "text-stone-900 dark:text-stone-100"
+                        : "text-stone-400 dark:text-stone-500"
+                    }`}
+                  >
+                    {product.name ?? product.url}
+                  </Link>
+                  <Badge tone={product.active ? "success" : "neutral"}>
+                    {product.active
+                      ? t("productList.active")
+                      : t("productList.paused")}
+                  </Badge>
+                </div>
+                <p className="truncate text-xs text-stone-400 dark:text-stone-500">
+                  {product.url}
+                </p>
+                <p className="text-sm text-stone-500 dark:text-stone-400">
+                  {product.currentPrice != null ? (
+                    <>
+                      <span
+                        className={`text-base font-semibold tabular-nums ${
+                          product.active
+                            ? "text-stone-900 dark:text-stone-100"
+                            : "text-stone-400 dark:text-stone-500"
+                        }`}
+                      >
+                        {formatPrice(product.currentPrice, product.currency)}
+                      </span>
+                      {t("productList.checked")}
+                      <span title={formatDateTime(product.lastCheckedAt)}>
+                        {formatRelativeTime(product.lastCheckedAt)}
+                      </span>
+                    </>
+                  ) : (
+                    t("productList.noPrice")
+                  )}
+                </p>
               </div>
-              <p className="truncate text-xs text-slate-400 dark:text-slate-500">
-                {product.url}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {product.currentPrice != null ? (
-                  <>
-                    <span
-                      className={`text-base font-semibold tabular-nums ${
-                        product.active
-                          ? "text-slate-900 dark:text-slate-100"
-                          : "text-slate-400 dark:text-slate-500"
-                      }`}
-                    >
-                      {formatPrice(product.currentPrice, product.currency)}
-                    </span>
-                    {t("productList.checked")}
-                    <span title={formatDateTime(product.lastCheckedAt)}>
-                      {formatRelativeTime(product.lastCheckedAt)}
-                    </span>
-                  </>
-                ) : (
-                  t("productList.noPrice")
-                )}
-              </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <ButtonSecondary

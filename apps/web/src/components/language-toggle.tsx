@@ -17,7 +17,7 @@ export function LanguageToggle() {
 
   if (!mounted) {
     return (
-      <div className="h-8 w-24 rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900" />
+      <div className="h-8 w-24 rounded-lg border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-900" />
     );
   }
 

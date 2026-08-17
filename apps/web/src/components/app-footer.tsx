@@ -34,7 +34,7 @@ function IssuesIcon({ className = "h-4 w-4" }: { className?: string }) {
 }
 
 const externalLinkClass =
-  "inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-slate-600 transition-colors hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:text-slate-400 dark:hover:text-[var(--accent)] dark:focus-visible:ring-offset-slate-950";
+  "inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-stone-600 transition-colors hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:text-stone-400 dark:hover:text-[var(--accent)] dark:focus-visible:ring-offset-stone-950";
 
 /**
  * Shared project links (repo + issues). Used by the full app footer and the
@@ -76,9 +76,9 @@ export function ProjectLinks({ className = "" }: { className?: string }) {
 export function AppFooter() {
   const { t } = useI18n();
   return (
-    <footer className="mt-auto border-t border-slate-200/90 bg-white/80 dark:border-slate-800 dark:bg-slate-950/80">
+    <footer className="mt-auto border-t border-stone-200/90 bg-white/80 dark:border-stone-800 dark:bg-stone-950/80">
       <div className="mx-auto flex max-w-5xl flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-stone-500 dark:text-stone-400">
           {t("footer.tagline")}
         </p>
         <ProjectLinks />

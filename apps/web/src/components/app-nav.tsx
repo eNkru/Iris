@@ -44,10 +44,10 @@ export function AppNav() {
     return (
       <Link
         to={href}
-        className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-950 ${
+        className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:focus-visible:ring-offset-stone-950 ${
           active
-            ? "bg-[var(--accent-muted)] text-[var(--accent)]"
-            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100"
+            ? "bg-[var(--accent-muted)] text-[var(--accent-strong)]"
+            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-900 dark:hover:text-stone-100"
         }`}
       >
         {label}
@@ -56,12 +56,12 @@ export function AppNav() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/90 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/90">
+    <header className="sticky top-0 z-40 border-b border-stone-200/90 bg-white/90 backdrop-blur-md dark:border-stone-800 dark:bg-stone-950/90">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to="/"
-            className="mr-2 inline-flex items-center gap-2 rounded-lg text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:text-slate-100 dark:focus-visible:ring-offset-slate-950"
+            className="mr-2 inline-flex items-center gap-2 rounded-lg text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:text-stone-100 dark:focus-visible:ring-offset-stone-950"
           >
             <BrandMark className="h-7 w-7" decorative />
             <span className="text-lg font-semibold tracking-tight">
@@ -76,7 +76,7 @@ export function AppNav() {
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <LanguageToggle />
           <ThemeToggle />
-          <span className="hidden max-w-[12rem] truncate text-sm text-slate-500 sm:inline dark:text-slate-400">
+          <span className="hidden max-w-[12rem] truncate text-sm text-stone-500 sm:inline dark:text-stone-400">
             {loaded ? user?.email ?? "" : "…"}
           </span>
           <ButtonSecondary onClick={handleSignOut}>

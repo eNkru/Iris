@@ -480,3 +480,38 @@ Hardened the server-side product image pipeline: added a shared retryWithBackoff
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Dark-mode recolor gold/amber + PR
+
+**Date**: 2026-08-18
+**Task**: Dark-mode recolor gold/amber + PR
+**Branch**: `feat/dark-mode-recolor`
+
+### Summary
+
+Completed 08-17-dark-mode-recolor: amber/gold accents, stone neutrals, accent-strong, rainbow-arc logo. Spec updated. Branch feat/dark-mode-recolor pushed; PR 21 opened. AC1-7 verified; AC8 manual visual remaining.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `20d9551` | (see git log) |
+| `aa65e19` | (see git log) |
+| `52acdae` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

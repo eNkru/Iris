@@ -116,7 +116,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.aiBaseUrlHint")}
             </p>
           </div>
@@ -135,7 +135,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {data?.settings.aiApiKey
                 ? t("adminSettings.aiApiKeyStored", { key: data.settings.aiApiKey })
                 : t("adminSettings.aiApiKeyNone")}
@@ -156,7 +156,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.aiModelHint")}
             </p>
           </div>
@@ -178,7 +178,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.intervalHint")}
             </p>
           </div>
@@ -197,7 +197,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {data?.settings.telegramBotToken
                 ? t("adminSettings.botTokenStored", {
                     token: data.settings.telegramBotToken,
@@ -219,7 +219,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.aiZenHostHint")}
             </p>
           </div>
@@ -237,7 +237,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.aiUserAgentHint")}
             </p>
           </div>
@@ -255,7 +255,7 @@ export function AdminSettingsSection() {
               }}
               disabled={updateGlobalSettings.isPending}
             />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {t("adminSettings.aiClientHeaderHint")}
             </p>
           </div>

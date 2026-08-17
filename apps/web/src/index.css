@@ -4,36 +4,38 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design tokens for the professional shell (restrained slate + cool accent).
- * Chart SVG colors still need CSS vars because Recharts stroke can't take
- * Tailwind utilities directly.
+ * Design tokens — Iris (Ἶρις), goddess of the rainbow & golden-winged messenger.
+ * Warm gold/amber accent + warm-neutral (stone) surfaces. Chart SVG colors need
+ * CSS vars because Recharts stroke can't take Tailwind utilities directly.
  */
 :root {
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-fg: #ffffff;
-  --accent-muted: #eef2ff;
-  --accent-ring: #6366f1;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-fg: #1c1917;
+  --accent-strong: #92400e;
+  --accent-muted: #fef3c7;
+  --accent-ring: #f59e0b;
   --surface: #ffffff;
-  --surface-muted: #f8fafc;
-  --border-subtle: #e2e8f0;
-  --chart-grid: #e2e8f0;
-  --chart-axis: #94a3b8;
-  --chart-line: #4f46e5;
-  --chart-dot: #4f46e5;
+  --surface-muted: #fafaf9;
+  --border-subtle: #e7e5e4;
+  --chart-grid: #e7e5e4;
+  --chart-axis: #a8a29e;
+  --chart-line: #d97706;
+  --chart-dot: #d97706;
 }
 
 .dark {
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-fg: #0f172a;
-  --accent-muted: #1e1b4b;
-  --accent-ring: #818cf8;
-  --surface: #0f172a;
-  --surface-muted: #020617;
-  --border-subtle: #1e293b;
-  --chart-grid: #1e293b;
-  --chart-axis: #64748b;
-  --chart-line: #a5b4fc;
-  --chart-dot: #e0e7ff;
+  --accent: #fbbf24;
+  --accent-hover: #f59e0b;
+  --accent-fg: #1c1917;
+  --accent-strong: #fbbf24;
+  --accent-muted: #422006;
+  --accent-ring: #fbbf24;
+  --surface: #1c1917;
+  --surface-muted: #0c0a09;
+  --border-subtle: #292524;
+  --chart-grid: #292524;
+  --chart-axis: #78716c;
+  --chart-line: #fbbf24;
+  --chart-dot: #fde68a;
 }

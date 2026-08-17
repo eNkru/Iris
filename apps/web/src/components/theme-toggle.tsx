@@ -20,7 +20,7 @@ export function ThemeToggle() {
       <button
         type="button"
         aria-label={t("nav.toggleTheme")}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm text-stone-700 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
         disabled
       />
     );
@@ -32,7 +32,7 @@ export function ThemeToggle() {
       aria-label={label}
       title={label}
       onClick={toggleTheme}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:ring-offset-slate-950"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm text-stone-700 shadow-sm transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800 dark:focus-visible:ring-offset-stone-950"
     >
       {theme === "dark" ? "☀️" : "🌙"}
     </button>

@@ -1,6 +1,7 @@
 /**
- * Simple monogram mark for Iris chrome (restrained slate / accent — not the
- * full rainbow angel illustration). Inline SVG keeps the app dependency-free.
+ * Iris brand mark — a geometric rainbow arc + gold sun. References Iris (Ἶρις),
+ * Greek goddess of the rainbow and golden-winged messenger; the arc form also
+ * echoes a rising price curve. Inline SVG keeps the app dependency-free.
  *
  * Pass `decorative` when the mark sits next to a visible wordmark so screen
  * readers do not announce "Iris" twice.
@@ -26,28 +27,15 @@ export function BrandMark({
       aria-label={decorative ? undefined : title}
     >
       {decorative ? null : <title>{title}</title>}
-      <circle
-        cx="16"
-        cy="16"
-        r="15"
-        className="fill-[var(--accent-muted)] stroke-[var(--accent)]"
-        strokeWidth="1.5"
-      />
-      <circle
-        cx="16"
-        cy="16"
-        r="6.5"
-        className="stroke-[var(--accent)]"
-        strokeWidth="1.75"
-      />
-      <circle cx="16" cy="16" r="2.25" className="fill-[var(--accent)]" />
-      {/* Iris-like radial ticks */}
-      <path
-        d="M16 4.5v3.2M16 24.3v3.2M4.5 16h3.2M24.3 16h3.2M7.9 7.9l2.3 2.3M21.8 21.8l2.3 2.3M7.9 24.1l2.3-2.3M21.8 10.2l2.3-2.3"
-        className="stroke-[var(--accent)]"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-      />
+      {/* Rainbow arc — Iris, goddess of the rainbow. Five concentric bands
+          rising from a shared baseline, muted -400 palette. */}
+      <path d="M3 27A13 13 0 0 1 29 27" stroke="#f87171" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5 27A11 11 0 0 1 27 27" stroke="#fb923c" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7 27A9 9 0 0 1 25 27" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+      <path d="M9 27A7 7 0 0 1 23 27" stroke="#34d399" strokeWidth="2" strokeLinecap="round" />
+      <path d="M11 27A5 5 0 0 1 21 27" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
+      {/* Gold sun — golden wings / rising price peak */}
+      <circle cx="16" cy="12" r="1.6" fill="#fbbf24" />
     </svg>
   );
 }

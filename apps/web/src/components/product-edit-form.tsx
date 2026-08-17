@@ -108,12 +108,12 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
             setPollIntervalMinutes(e.target.value);
           }}
         />
-        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+        <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
           {t("editForm.intervalHint")}
         </p>
       </div>
 
-      <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+      <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900/50">
         <div className="flex items-center gap-2">
           <input
             id="any-change"
@@ -123,7 +123,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
               setSavedAt(null);
               setAnyChange(e.target.checked);
             }}
-            className="h-4 w-4 rounded border-slate-300 dark:border-slate-700"
+            className="h-4 w-4 rounded border-stone-300 dark:border-stone-700"
           />
           <Label htmlFor="any-change" className="mb-0">
             {t("editForm.anyChange")}
@@ -136,7 +136,7 @@ export function ProductEditForm({ product }: { product: ProductOutput }) {
           {numberField(t("editForm.riseAbs"), riseAbs, setRiseAbs)}
           {numberField(t("editForm.fallAbs"), fallAbs, setFallAbs)}
         </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500">
+        <p className="text-xs text-stone-400 dark:text-stone-500">
           {t("editForm.thresholdsHint")}
         </p>
         {silentConfig ? (

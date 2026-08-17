@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-08-16
+- **Total Sessions**: 13
+- **Last Active**: 2026-08-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~482 | Active |
+| `journal-1.md` | ~517 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-08-18 | Dark-mode recolor gold/amber + PR | `20d9551`, `aa65e19`, `52acdae` | `feat/dark-mode-recolor` |
 | 12 | 2026-08-16 | Image loading pipeline improvements | `d6f8877` | `feat/image-loading-improvements` |
 | 11 | 2026-08-13 | Throttle OpenCode Zen extraction (429 fix) | `377431c` | `main` |
 | 10 | 2026-08-12 | On-demand camoufox browser lifecycle | `d879392` | `main` |

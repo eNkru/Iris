@@ -58,7 +58,7 @@ export function PriceChart({
 
   if (data.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 py-8 text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex flex-col items-center gap-2 py-8 text-sm text-stone-500 dark:text-stone-400">
         <span>{t("chart.empty")}</span>
         <span className="text-xs">{t("chart.emptyHint")}</span>
       </div>
@@ -68,7 +68,7 @@ export function PriceChart({
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
           {t("chart.range")}
         </span>
         <SegmentedControl

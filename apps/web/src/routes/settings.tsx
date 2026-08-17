@@ -24,14 +24,14 @@ export function SettingsPage() {
         />
 
         <Card>
-          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
             {t("settings.alertChannels")}
           </h2>
           <ChannelsSection />
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
             {t("settings.yourSettings")}
           </h2>
           <UserSettingsSection />
@@ -39,7 +39,7 @@ export function SettingsPage() {
 
         {isAdmin ? (
           <Card>
-            <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            <h2 className="mb-4 text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
               {t("settings.globalAdmin")}
             </h2>
             <AdminSettingsSection />
