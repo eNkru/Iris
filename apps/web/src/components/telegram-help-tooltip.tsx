@@ -31,16 +31,16 @@ export function TelegramHelpTooltip({
       <button
         type="button"
         aria-label={t("tooltip.aria")}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:focus-visible:ring-slate-400"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 text-xs font-semibold text-stone-500 transition-colors hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:focus-visible:ring-stone-400"
       >
         ?
       </button>
       {open ? (
         <span
           role="tooltip"
-          className="absolute bottom-full left-0 z-10 mb-2 w-72 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+          className="absolute bottom-full left-0 z-10 mb-2 w-72 rounded-md border border-stone-200 bg-white p-3 text-xs text-stone-700 shadow-lg dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300"
         >
-          <span className="mb-1.5 block font-semibold text-slate-900 dark:text-slate-100">
+          <span className="mb-1.5 block font-semibold text-stone-900 dark:text-stone-100">
             {heading}
           </span>
           <ol className="list-decimal space-y-1 pl-4">

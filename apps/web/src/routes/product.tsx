@@ -47,7 +47,7 @@ export function ProductDetailPage() {
           <div className="mt-4">
             <Link
               to="/"
-              className="text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
+              className="text-sm font-medium text-stone-500 transition-colors hover:text-[var(--accent)] dark:text-stone-400 dark:hover:text-[var(--accent)]"
             >
               {t("detail.back")}
             </Link>
@@ -65,7 +65,7 @@ export function ProductDetailPage() {
         <div className="space-y-3">
           <Link
             to="/"
-            className="inline-flex text-sm font-medium text-slate-500 transition-colors hover:text-[var(--accent)] dark:text-slate-400 dark:hover:text-[var(--accent)]"
+            className="inline-flex text-sm font-medium text-stone-500 transition-colors hover:text-[var(--accent)] dark:text-stone-400 dark:hover:text-[var(--accent)]"
           >
             {t("detail.back")}
           </Link>
@@ -75,17 +75,17 @@ export function ProductDetailPage() {
                 <img
                   src={`/api/images/${product.id}`}
                   alt={product.name ?? product.url}
-                  className="h-48 w-48 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                  className="h-48 w-48 shrink-0 rounded-lg border border-stone-200 object-cover dark:border-stone-700"
                 />
               ) : null}
               <div className="min-w-0 space-y-1">
                 <h1
-                  className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  className="truncate text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50"
                   title={product.url}
                 >
                   {product.name ?? product.url}
                 </h1>
-                <p className="truncate text-sm text-slate-400 dark:text-slate-500">
+                <p className="truncate text-sm text-stone-400 dark:text-stone-500">
                   {product.url}
                 </p>
               </div>
@@ -95,9 +95,9 @@ export function ProductDetailPage() {
             </Badge>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-600 dark:text-stone-300">
             {product.currentPrice != null ? (
-              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <span className="text-base font-semibold text-stone-900 dark:text-stone-100">
                 {t("detail.currentPrice", {
                   price: formatPrice(product.currentPrice, product.currency),
                 })}
@@ -152,7 +152,7 @@ export function ProductDetailPage() {
               </p>
             ) : null}
             {checkNow.data?.check.status === "unchanged" ? (
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">
                 {t("detail.priceUnchanged", {
                   price: formatPrice(
                     checkNow.data.check.price,
@@ -177,14 +177,14 @@ export function ProductDetailPage() {
         </div>
 
         <Card>
-          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
             {t("detail.priceHistory")}
           </h2>
           <PriceChart history={history} currency={product.currency} />
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h2 className="mb-4 text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
             {t("detail.settings")}
           </h2>
           <ProductEditForm product={product} />

@@ -17,7 +17,7 @@ import type {
  */
 
 const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-1 dark:focus-visible:ring-offset-stone-950";
 
 export function Button({
   className = "",
@@ -37,7 +37,7 @@ export function ButtonSecondary({
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 ${focusRing} disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 shadow-sm transition-colors hover:bg-stone-50 ${focusRing} disabled:cursor-not-allowed disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800 ${className}`}
       {...props}
     />
   );
@@ -49,7 +49,7 @@ export function ButtonDanger({
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 ${focusRing} disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/80 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-950 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 ${focusRing} disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/80 dark:bg-stone-900 dark:text-red-400 dark:hover:bg-red-950 ${className}`}
       {...props}
     />
   );
@@ -61,7 +61,7 @@ export function Input({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 transition-colors focus:border-[var(--accent-ring)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 ${className}`}
+      className={`w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-stone-400 transition-colors focus:border-[var(--accent-ring)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 ${className}`}
       {...props}
     />
   );
@@ -73,7 +73,7 @@ export function Label({
 }: LabelHTMLAttributes<HTMLLabelElement>) {
   return (
     <label
-      className={`mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300 ${className}`}
+      className={`mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300 ${className}`}
       {...props}
     />
   );
@@ -88,7 +88,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 ${className}`}
+      className={`rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900/80 ${className}`}
     >
       {children}
     </div>
@@ -97,9 +97,9 @@ export function Card({
 
 export function Spinner({ label }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+    <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
       <span
-        className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-[var(--accent)] dark:border-slate-700 dark:border-t-[var(--accent)]"
+        className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-stone-200 border-t-[var(--accent)] dark:border-stone-700 dark:border-t-[var(--accent)]"
         aria-hidden
       />
       {label ? <span>{label}</span> : null}
@@ -143,13 +143,13 @@ export function Badge({
 }) {
   const tones: Record<NonNullable<typeof tone>, string> = {
     neutral:
-      "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+      "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",
     success:
       "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
     warning:
       "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
     accent:
-      "bg-[var(--accent-muted)] text-[var(--accent)] dark:text-[var(--accent)]",
+      "bg-[var(--accent-muted)] text-[var(--accent-strong)] dark:text-[var(--accent)]",
   };
   return (
     <span
@@ -179,11 +179,11 @@ export function PageHeader({
       className={`flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${className}`}
     >
       <div className="min-w-0 space-y-1.5">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
           {title}
         </h1>
         {description ? (
-          <div className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <div className="max-w-2xl text-sm leading-relaxed text-stone-500 dark:text-stone-400">
             {description}
           </div>
         ) : null}
@@ -258,7 +258,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="group"
       aria-label={label}
-      className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+      className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 shadow-sm dark:border-stone-700 dark:bg-stone-900"
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -271,7 +271,7 @@ export function SegmentedControl<T extends string>({
             className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${focusRing} ${
               active
                 ? "bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                : "text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
             }`}
           >
             {option.label}

@@ -65,7 +65,7 @@ export function AddProductForm() {
         </p>
       ) : null}
       {createProduct.data?.check.status === "unchanged" ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        <p className="text-sm text-stone-600 dark:text-stone-300">
           {t("addProduct.addedUnchanged", {
             price: createProduct.data.check.price.toFixed(2),
           })}

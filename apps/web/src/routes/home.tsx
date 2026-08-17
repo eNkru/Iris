@@ -23,14 +23,14 @@ export function HomePage() {
         />
 
         <Card className="max-w-xl space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
             {t("home.addSection")}
           </h2>
           <AddProductForm />
         </Card>
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h2 className="text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">
             {t("home.tracked")}
           </h2>
           <ProductList />

@@ -98,13 +98,13 @@ export function ChannelsSection() {
             return (
               <div
                 key={channel.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+                className="flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-white px-4 py-3 dark:border-stone-800 dark:bg-stone-900"
               >
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
                     {t("channels.rowTitle", { id: String(channel.config.chatId ?? "?") })}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
                     {channel.enabled ? t("channels.enabled") : t("channels.disabled")}
                   </p>
                 </div>
@@ -143,7 +143,7 @@ export function ChannelsSection() {
           })}
         </div>
       ) : (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t("channels.empty")}</p>
+        <p className="text-sm text-stone-500 dark:text-stone-400">{t("channels.empty")}</p>
       )}
 
       <form onSubmit={onSubmit} className="max-w-md space-y-3">
@@ -159,9 +159,9 @@ export function ChannelsSection() {
             onChange={(e) => setChatId(e.target.value)}
             disabled={createChannel.isPending}
           />
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
             {t("channels.chatIdHint")}
-            <code className="ml-1 rounded bg-slate-100 px-1 dark:bg-slate-800">123456789</code>.
+            <code className="ml-1 rounded bg-stone-100 px-1 dark:bg-stone-800">123456789</code>.
           </p>
         </div>
         <div>
