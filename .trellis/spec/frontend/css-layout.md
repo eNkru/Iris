@@ -376,26 +376,56 @@ Use Tailwind v4 `@custom-variant dark` and semantic CSS variables, not
 hardcoded colors. Never put an opaque light color inline that breaks in dark
 mode.
 
+Iris brand tokens live in `apps/web/src/index.css` (`:root` + `.dark`):
+
+| Role | Token(s) | Palette |
+|---|---|---|
+| Accent (buttons, links, focus, spinner) | `--accent`, `--accent-hover`, `--accent-ring`, `--accent-muted` | amber/gold |
+| Text on bright gold buttons | `--accent-fg` | stone-900 (dark text on gold) |
+| Text on amber-muted tint only | `--accent-strong` | light: amber-800; dark: = `--accent` |
+| Surfaces / borders | `--surface`, `--surface-muted`, `--border-subtle` | stone (warm neutral) |
+| Charts | `--chart-grid`, `--chart-axis`, `--chart-line`, `--chart-dot` | gold + stone mid-tones |
+
 ```css
-/* global.css */
+/* apps/web/src/index.css — shape only; hex values live in the file */
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 :root {
-  --bkg: #fff;  --content: #000;
-  --chart-grid: #94a3b8; --chart-grid-strong: #64748b;
+  --accent: /* amber-500 */; --accent-strong: /* amber-800 */;
+  --surface: #ffffff; --surface-muted: /* stone-50 */;
+  --chart-line: /* amber-600 */; /* … */
 }
 .dark {
-  --bkg: #0b1220; --content: #e2e8f0; --chart-grid: #334155;
+  --accent: /* amber-400 */; --accent-strong: /* = --accent */;
+  --surface: /* stone-900 */; --surface-muted: /* stone-950 */;
+  --chart-line: /* amber-400 */; /* … */
 }
 ```
 
+**Conventions (do not regress):**
+
+- **Neutrals are `stone-*`, never `slate-*`.** Slate has a blue undertone; raw
+  Tailwind surface/border/text utilities must stay on the stone scale (1:1
+  numeric swap). Grep for `slate-` in `apps/web/src` + `index.html` before
+  shipping UI color work.
+- **Do not put indigo/blue hex back into `--accent*` / `--chart-*`.** Multicolor
+  is allowed only in the brand mark (rainbow arc), not in UI chrome.
+- **`--accent-strong` for text-on-tint only.** Gold is too light to double as
+  both button-bg and text-on-`--accent-muted`. Call-sites today: active nav in
+  `app-nav.tsx`, amber Badge light side in `ui.tsx`. Do not use `--accent-strong`
+  for button backgrounds.
+- **Semantic red is separate.** `text-red-*` / `bg-red-*` / `border-red-*` on
+  destructive controls stay red — never migrate them with a neutral swap.
 - **Charts (Recharts)**: never hardcode SVG fill/stroke colors. Reference CSS
   variables (`var(--chart-*)`) defined in both `:root` and `.dark` so a single
   series reads correctly in both themes. A chart that looked fine in light mode
   but was near-invisible in dark is a bug, not a surprise.
+- **Brand mark** (`brand-mark.tsx` / `public/icon.svg`): geometric rainbow arc +
+  gold sun; colors are **static** SVG attrs (not `var(--accent)`). Favicon uses
+  3 bands on stone-950 for 16px legibility; in-app mark uses 5 bands.
 - Theme is applied via a `.dark` class on `<html>` (see
-  `apps/web/lib/theme.tsx` `ThemeProvider`); the provider pins the initial
-  theme in an inline script in `layout.tsx` to avoid a flash of the wrong theme.
+  `apps/web/src/lib/theme.tsx` `ThemeProvider`); FOUC script + SSR mounted-guard
+  stay behavior-only — recolors never touch theme persistence / OS-follow.
 
 ## Best Practices Summary
 
