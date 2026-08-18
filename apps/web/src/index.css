@@ -22,6 +22,8 @@
   --chart-axis: #a8a29e;
   --chart-line: #d97706;
   --chart-dot: #d97706;
+  --chart-area: #d97706;
+  --chart-area-fill: #d9770619;
 }
 
 .dark {
@@ -38,4 +40,6 @@
   --chart-axis: #78716c;
   --chart-line: #fbbf24;
   --chart-dot: #fde68a;
+  --chart-area: #fbbf24;
+  --chart-area-fill: #fbbf2419;
 }
