@@ -515,3 +515,36 @@ Completed 08-17-dark-mode-recolor: amber/gold accents, stone neutrals, accent-st
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Price chart daily gap fill
+
+**Date**: 2026-08-18
+**Task**: Price chart daily gap fill
+**Branch**: `feat/price-chart-daily-fill`
+
+### Summary
+
+Committed and pushed feat/price-chart-daily-fill: expanded change-point history to a continuous daily series, switched to a stepped AreaChart with gradient fill, and added chart area CSS variables for light/dark themes.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c46412` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
