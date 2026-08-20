@@ -548,3 +548,36 @@ Committed and pushed feat/price-chart-daily-fill: expanded change-point history 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Retry transient 503 from AI provider
+
+**Date**: 2026-08-20
+**Task**: Retry transient 503 from AI provider
+**Branch**: `main`
+
+### Summary
+
+Kogan product creates were rolling back with 'Service Unavailable' on the preloaded-html AI extraction path. Root cause: Zen's DeepSeek free tier intermittently returns HTTP 503 under load (confirmed by replaying the exact Kogan request — 200 OK, correct $469 NZD extraction). The retry predicate in ai-extract.ts only matched 429/'rate limit', so 503 threw on the first attempt with no backoff. Broadened isRetryableError to cover 502/503/504 (on status and statusCode), honor the AI SDK's isRetryable flag, and match 'service unavailable'/'bad gateway'/'gateway timeout' in messages. Renamed the warn log to 'Transient AI provider error, retrying' and added the error message. Added 503-retry and 400-no-retry unit tests. Did not touch the firecrawl task — this was an incidental bugfix.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `01a2191` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

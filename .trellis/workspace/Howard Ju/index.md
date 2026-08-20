@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
-- **Last Active**: 2026-08-18
+- **Total Sessions**: 15
+- **Last Active**: 2026-08-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~550 | Active |
+| `journal-1.md` | ~583 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-08-20 | Retry transient 503 from AI provider | `01a2191` | `main` |
 | 14 | 2026-08-18 | Price chart daily gap fill | `1c46412` | `feat/price-chart-daily-fill` |
 | 13 | 2026-08-18 | Dark-mode recolor gold/amber + PR | `20d9551`, `aa65e19`, `52acdae` | `feat/dark-mode-recolor` |
 | 12 | 2026-08-16 | Image loading pipeline improvements | `d6f8877` | `feat/image-loading-improvements` |
