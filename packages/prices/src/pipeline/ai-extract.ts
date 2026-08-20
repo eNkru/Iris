@@ -251,17 +251,64 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-function isRateLimitError(error: unknown): boolean {
+/**
+ * Whether a `generateText` failure should be retried with backoff.
+ *
+ * Covers two classes of transient upstream failures from the Zen /
+ * OpenAI-compatible endpoint:
+ *
+ * - 429 / "rate limit": the free-tier quota burst. The original retry case.
+ * - 502 / 503 / 504: gateway-class transient errors. Zen's DeepSeek free
+ *   tier intermittently returns 503 "Service Unavailable" under load even
+ *   when the same request succeeds a moment later (confirmed live
+ *   2026-08-19: a Kogan extraction that 503'd on the scheduler tick
+ *   returned 200 with a correct price when replayed manually). Treating
+ *   503 as terminal rolls back product creates for transient outages, so
+ *   it must retry here.
+ *
+ * The AI SDK throws `APICallError` which carries `statusCode` (the HTTP
+ * status) and an SDK-computed `isRetryable` flag; we honor both. Plain
+ * `Error`s from the transport (network timeouts etc.) are matched by message
+ * as a fallback.
+ */
+function isRetryableError(error: unknown): boolean {
   if (error && typeof error === "object") {
-    const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
-    if (candidate.status === 429 || candidate.code === 429) {
+    const candidate = error as {
+      status?: unknown;
+      code?: unknown;
+      statusCode?: unknown;
+      isRetryable?: unknown;
+      message?: unknown;
+    };
+    if (
+      candidate.status === 429 ||
+      candidate.code === 429 ||
+      candidate.statusCode === 429 ||
+      candidate.status === 502 ||
+      candidate.status === 503 ||
+      candidate.status === 504 ||
+      candidate.statusCode === 502 ||
+      candidate.statusCode === 503 ||
+      candidate.statusCode === 504
+    ) {
       return true;
     }
-    if (typeof candidate.message === "string" && /rate limit/i.test(candidate.message)) {
+    if (candidate.isRetryable === true) {
       return true;
+    }
+    if (typeof candidate.message === "string") {
+      if (/rate limit/i.test(candidate.message)) {
+        return true;
+      }
+      if (/\b(502|503|504)\b|service unavailable|bad gateway|gateway timeout/i.test(candidate.message)) {
+        return true;
+      }
     }
   }
-  return /rate limit/i.test(String(error));
+  if (/rate limit/i.test(String(error))) {
+    return true;
+  }
+  return /\b(502|503|504)\b|service unavailable|bad gateway|gateway timeout/i.test(String(error));
 }
 
 function calculateRateLimitDelay(attempt: number): number {
@@ -319,14 +366,15 @@ async function runWithMinIntervalAndRetry<T>(
       return result;
     } catch (error) {
       lastZenCallEndedAt = Date.now();
-      if (isRateLimitError(error) && attempt < AI_EXTRACT_MAX_RETRIES) {
+      if (isRetryableError(error) && attempt < AI_EXTRACT_MAX_RETRIES) {
         const delay = calculateRateLimitDelay(attempt);
-        logger.warn("Rate limited, retrying", {
+        logger.warn("Transient AI provider error, retrying", {
           operation: "aiExtractPrice",
           productId: context.productId,
           url: context.url,
           attempt,
           delay: Math.round(delay),
+          error: error instanceof Error ? error.message : String(error),
         });
         await sleep(delay);
         continue;

@@ -127,18 +127,66 @@ describe("aiExtractPrice throttle", () => {
     });
     expect(generateText).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(
-      "Rate limited, retrying",
+      "Transient AI provider error, retrying",
       expect.objectContaining({
         operation: "aiExtractPrice",
         productId: "prod-1",
         url: "https://example.test/retry",
         attempt: 1,
         delay: expect.any(Number),
+        error: "Error from provider (Console): Rate limit exceeded",
       }),
     );
     const retryContext = warn.mock.calls[0]?.[1] as { delay?: number } | undefined;
     expect(retryContext?.delay).toBeGreaterThanOrEqual(2000);
     expect(retryContext?.delay).toBeLessThan(3000);
+    warn.mockRestore();
+  }, 8_000);
+
+  it("retries a first-call 503 Service Unavailable and then succeeds", async () => {
+    // Zen's DeepSeek free tier intermittently returns 503 under load even
+    // when the same request succeeds a moment later. Without 503 in the
+    // retry set, the product create rolls back for a transient outage.
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const serviceUnavailable = Object.assign(new Error("Service Unavailable"), {
+      status: 503,
+      statusCode: 503,
+    });
+
+    generateText
+      .mockRejectedValueOnce(serviceUnavailable)
+      .mockResolvedValueOnce({ text: OK_TEXT });
+
+    const result = await extract("https://www.kogan.com/nz/buy/kogan-50-led-4k-smart-ai-google-tv-u96v/");
+
+    expect(result).toEqual({
+      available: true,
+      price: 119,
+      currency: "NZD",
+      name: "Widget",
+    });
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      "Transient AI provider error, retrying",
+      expect.objectContaining({
+        attempt: 1,
+        error: "Service Unavailable",
+      }),
+    );
+    warn.mockRestore();
+  }, 8_000);
+
+  it("does not retry a 400 schema/validation error", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const badRequest = Object.assign(new Error("Bad Request"), { status: 400 });
+
+    generateText.mockRejectedValue(badRequest);
+
+    const result = await extract("https://example.test/bad");
+
+    expect(result).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   }, 8_000);
 });
